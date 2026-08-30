@@ -266,7 +266,46 @@ has an honest answer for every line.
 Remote/hosted MCP server, auth, token issuance, deployment. Vector and graph driver
 implementations. Any team's actual knowledge content or golden questions.
 
-## 17. Open items carried into planning
+## 18. Non-destructive generation and reconciliation
+
+The generator runs against repos that may already contain hand-authored AI
+infrastructure. It must never cause loss of that work.
+
+**Hard guarantees:**
+
+- The generator **never deletes a file.**
+- The generator **never overwrites a file it did not itself create in a prior
+  run.** Its own output is tracked in `team-profile.yaml` under `generated_paths:`
+  as `{ path, sha256 }` entries. A target is writable only if it is absent,
+  byte-identical to the new render, or a recorded prior render whose on-disk hash
+  still matches (i.e. not hand-edited since).
+- Any other existing target is a **collision**: not written, reported.
+
+**Preflight reports what to preserve.** `scanPreflight` returns `existingAssets`:
+an existing agent-config file (`AGENTS.md` / `CLAUDE.md` / `.claude/`), an
+existing router or SME agent (`agents/*.yaml`, `.claude/agents/*`), existing
+`kb/**`, existing skills. On an `extend` assessment the architecture's rule
+(§4) applies: adopt the existing agent config, do not create a parallel one.
+
+**`init` stops and asks on conflict.** After preflight and the interview, and
+before writing anything, `init` computes a dry render plan. If there are
+collisions, or an existing SME / agent-config is present under `extend`, it
+presents these options and writes nothing until the operator chooses:
+
+| Option | Effect |
+|---|---|
+| `adopt-existing` | Keep every existing file. Generate only absent paths. Record the boundary in `docs/architecture.md`. |
+| `siblings` | Write generated versions as `<path>.team-ai-new` beside the originals for manual diff/merge. Nothing overwritten. |
+| `subdir` | Generate the whole instance into `./team-ai/` for the operator to merge. |
+| `abort` | Write nothing. |
+
+There is no "overwrite" option and deletion is never offered. `--on-conflict
+<adopt-existing|siblings|subdir|abort>` pre-answers this for non-interactive runs.
+
+`upgrade` already refuses to touch `kb/`, `agents/`, `personas/`, `skills/`,
+`catalog/` and only re-renders plumbing — unchanged.
+
+## 19. Open items carried into planning
 
 - Whether the agnosticism denylist grep lives in `ci.yml` or as a `src/commands` check
   invoked by CI (leaning: a small script so forkers can run it locally too).

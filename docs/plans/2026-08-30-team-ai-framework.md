@@ -84,6 +84,7 @@ Files are grouped by responsibility. Each `src/**` file has one job and its own 
 - **No `any`.** `tsconfig` is strict; ESLint bans `any` and floating promises.
 - **Spec references** point at files copied into `docs/` in Task 0: `docs/architecture.md`, `docs/interview-spec.md`, `docs/design/2026-08-30-team-ai-framework-design.md`.
 - **Never** add a code path that calls an LLM from framework code. The connector probe only *detects and records* (design §3).
+- **Non-destructive generation (design §18):** the generator never deletes a file and never overwrites a file it did not create in a prior run. Its output is tracked in `team-profile.yaml` `generated_paths: [{ path, sha256 }]`. Any other existing target is a *collision* — reported, not written. `init` stops and asks (`adopt-existing | siblings | subdir | abort`) before writing when collisions or an existing SME/agent-config are present.
 
 ---
 
@@ -1494,7 +1495,9 @@ git add -A && git commit -m "feat(cli): binary shell plus validate-kb and valida
 
 **Acceptance Criteria:**
 - [ ] `scanPreflight(dir)` reports: MCP servers (`.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`), agent config (`CLAUDE.md`, `AGENTS.md`, `.claude/`, `.github/copilot-instructions.md`), vector-store env hints (`PINECONE_*`, `WEAVIATE_*`, `QDRANT_*`, `PGVECTOR`, `LANCEDB*`), org search hints (a configurable list), existing skills/plugins dirs.
+- [ ] `scanPreflight(dir)` also returns `existingAssets`: `{ agentConfigFile?: string, routerAgent?: string, agents: string[], kbDocCount: number, skills: string[] }` — the hand-authored assets the generator must preserve (design §18). `routerAgent` is any `agents/*.yaml` / `.claude/agents/*` whose `kind` is `router` or whose name matches `/sme|router/i`.
 - [ ] Produces one of `extend | coexist | stand-down` with the rationale text from interview-spec §4 (extend when compatible agent config present; stand-down when an org-search hint + "sources overlap" heuristic both fire).
+- [ ] When the assessment is `extend` and `existingAssets.agentConfigFile` is set, the report states "adopt `<file>`, do not create a parallel config" (architecture §4).
 - [ ] `prepareConnectorProbe(dir)` — if a GitHub/Drive connector is detected, returns the 5 sample questions + the exact manual steps for the operator to run them, and a slot to record the result. It performs **no retrieval and no model call**. A top-of-function comment states this and cites design §3.
 - [ ] `renderPreflight(report)` returns the `docs/preflight.md` body (interview-spec §4 format).
 
@@ -1584,29 +1587,43 @@ git add -A && git commit -m "feat(cli): binary shell plus validate-kb and valida
 
 ## Milestone G — Generator and templates
 
-### Task 27: Idempotent template renderer
+### Task 27: Non-destructive idempotent template renderer
 
-**Goal:** Render a Handlebars template tree into a target dir, reporting created vs skipped, with a real `--dry-run`.
+**Goal:** Render a Handlebars template tree into a target dir, classifying every target, never overwriting hand-authored files, never deleting, with a real `--dry-run`.
 
 **Files:**
-- Create: `src/generator/render.ts`, `src/generator/context.ts`
-- Test: `src/generator/render.test.ts`
+- Create: `src/generator/render.ts`, `src/generator/context.ts`, `src/generator/generated-manifest.ts`
+- Test: `src/generator/render.test.ts`, `src/generator/generated-manifest.test.ts`
 
 **Acceptance Criteria:**
-- [ ] `renderTree({ templateDir, destDir, context, dryRun })` walks `templateDir`, strips one `.hbs` suffix, renders with `context`, and writes only when the target is absent or its content differs.
-- [ ] Returns `{ created: string[], updated: string[], skipped: string[] }`.
-- [ ] `dryRun: true` performs no writes and returns the same report it would have applied.
-- [ ] Binary/`.keep` files are copied verbatim.
-- [ ] `buildContext(state)` maps `EngineState` → the flat template context (team name, namespaces, org path, driver, hosting, roles, domains, personas, skills, seed flag).
-- [ ] Handlebars runs with `noEscape: true` for non-HTML output and a fixed helper set (`kebab`, `snake`, `json`, `yamlList`).
+- [ ] `renderTree({ templateDir, destDir, context, dryRun, priorManifest, onCollision })` walks `templateDir`, strips one `.hbs` suffix, renders with `context`.
+- [ ] Each target is classified:
+  - **`created`** — target absent → write.
+  - **`unchanged`** — target present and byte-identical to the new render → no write.
+  - **`updated`** — target present, differs, AND `priorManifest` has an entry for it whose recorded `sha256` equals the current on-disk hash (a prior team-ai render, not hand-edited) → write.
+  - **`collision`** — target present, differs, and is NOT a matching prior render → **never written**. Handled per `onCollision`: `report` (default — collect and return), `siblings` (write `<path>.team-ai-new`), `skip`.
+- [ ] Returns `{ created, unchanged, updated, collisions, siblingsWritten }` (all `string[]`).
+- [ ] **`renderTree` never deletes a file** and never writes outside `destDir`.
+- [ ] `dryRun: true` performs no writes and returns the report it would have applied (collisions included).
+- [ ] `writeGeneratedManifest(destDir, entries)` records `{ path, sha256 }` for every file actually written, merged into `team-profile.yaml` `generated_paths:`; `readGeneratedManifest(destDir)` loads it (empty when absent).
+- [ ] Binary/`.keep` files are copied verbatim, still subject to the same classification.
+- [ ] `buildContext(state)` maps `EngineState` → the flat template context (team name, slug, mission, namespaces, org path, driver, hosting, roles, domains, personas, skills, seed flag, reviewByDate).
+- [ ] Handlebars runs with `noEscape: true` and a fixed helper set (`kebab`, `snake`, `json`, `yamlList`).
 - [ ] Missing context keys render as empty and are collected into a `warnings` array, never `undefined`.
 
-**Verify:** `npx vitest run src/generator/render.test.ts` → pass; a second render over the output yields all-skipped.
+**Verify:** `npx vitest run src/generator/render.test.ts src/generator/generated-manifest.test.ts` → pass.
 
 **Steps:**
-- [ ] Failing tests: fixture template dir → first render all-created; identical second render all-skipped; changed template → updated; `dryRun` → zero writes.
-- [ ] Implement.
-- [ ] Green, commit `feat(generator): idempotent Handlebars tree renderer`.
+- [ ] **Step 1: failing tests**
+  - fixture template dir → first render: all `created`; a generated manifest is written.
+  - identical second render (with `priorManifest`) → all `unchanged`.
+  - edit a template, re-render with matching `priorManifest` → that file `updated`.
+  - hand-edit an output file, then re-render → that file is a `collision`, not written; original content intact.
+  - `onCollision: "siblings"` → `<path>.team-ai-new` written, original untouched, `siblingsWritten` lists it.
+  - `dryRun: true` on a tree with a collision → zero writes, report still lists the collision.
+  - assert no code path calls `rm`/`unlink`.
+- [ ] **Step 2: implement** `render.ts` + `generated-manifest.ts` (sha256 via `node:crypto`).
+- [ ] **Step 3: green, commit** `feat(generator): non-destructive classifying tree renderer`.
 
 ---
 
@@ -1741,28 +1758,36 @@ _TODO: describe ceremonies, decision rights, and on-call._
 
 ### Task 32: `init` command
 
-**Goal:** Wire preflight → interview → gates → outputs → generate into a working instance, with `--dry-run`.
+**Goal:** Wire preflight → interview → gates → outputs → generate into a working instance, with `--dry-run` and non-destructive conflict reconciliation.
 
 **Files:**
-- Create: `src/generator/init.ts`
+- Create: `src/generator/init.ts`, `src/generator/reconcile.ts`
 - Modify: `src/cli.ts`
-- Test: `src/generator/init.test.ts`
+- Test: `src/generator/init.test.ts`, `src/generator/reconcile.test.ts`
 
 **Acceptance Criteria:**
-- [ ] `team-ai init [--dir .] [--dry-run] [--resume]` runs: `scanPreflight` → print report → `runInterviewCli` → on `done`, `writeOutputs` → `renderTree(templates/instance)` (+ conditional `mcp-server`) → `reindex` → `assemble-manifest` → `doctor`.
-- [ ] STAND DOWN outcome from preflight short-circuits: generate only `manifest.yaml`, `agents/`, `personas/`, `skills/`, `docs/` — no `kb/` index, no server (interview-spec §4).
-- [ ] `--dry-run` prints the file tree with created/skipped counts and writes nothing (interview-spec §12).
+- [ ] `team-ai init [--dir .] [--dry-run] [--resume] [--on-conflict <adopt-existing|siblings|subdir|abort>]` runs: `scanPreflight` → print report → `runInterviewCli` → on `done`, `writeOutputs` → **reconcile** → `renderTree(templates/instance)` (+ conditional `mcp-server`) → `reindex` → `assemble-manifest` → `doctor`.
+- [ ] **Reconciliation (design §18), before any template write:** compute a `dryRun` render plan against `readGeneratedManifest(dir)`. If `collisions.length > 0`, or the assessment is `extend` with `existingAssets.routerAgent`/`agentConfigFile` present, `init` **halts and prompts** (unless `--on-conflict` is set) with exactly these choices and writes nothing until one is picked:
+  - **`adopt-existing`** — do not write any colliding path or a parallel agent config; render only `created` targets; append a "coexistence boundary" paragraph to `docs/architecture.md` naming each adopted file (architecture §4 "Extend").
+  - **`siblings`** — pass `onCollision: "siblings"`; every colliding path is written as `<path>.team-ai-new`; originals untouched; `doctor` afterward lists the `.team-ai-new` files as "review and merge".
+  - **`subdir`** — re-run the whole render with `destDir = <dir>/team-ai/`; nothing in `<dir>` root is touched.
+  - **`abort`** — exit 0 having written only the interview outputs (`team-profile.yaml`, gate docs); no templates.
+- [ ] `init` **never deletes** anything and never overwrites a hand-authored file under any option.
+- [ ] STAND DOWN outcome from preflight short-circuits: generate only `manifest.yaml`, `agents/` (absent-only), `personas/`, `skills/`, `docs/` — no `kb/` index, no server (interview-spec §4).
+- [ ] `--dry-run` prints the file tree with `created` / `unchanged` / `updated` / `collision` counts and writes nothing (interview-spec §12).
 - [ ] `--resume` loads `.team-ai-interview-state.json` and only asks changed/new questions.
 - [ ] After a non-dry run, `doctor` prints the remaining-items list and `git` is **not** auto-run (operator does `git init`/push per `SETUP.md`).
-- [ ] End-to-end test: scripted default answers → generated dir passes `validate-kb`, `reindex` (chunks > 0), `search` (returns a hit), `assemble-manifest --check`.
+- [ ] End-to-end test: scripted default answers into an empty dir → generated dir passes `validate-kb`, `reindex` (chunks > 0), `search` (returns a hit), `assemble-manifest --check`.
+- [ ] Reconciliation test: pre-seed the target dir with `agents/sme.yaml` containing `# HAND AUTHORED SENTINEL`; run `init --on-conflict siblings` → `agents/sme.yaml` is byte-identical afterward, `agents/sme.yaml.team-ai-new` exists, `doctor` flags it.
 
-**Verify:** `npx vitest run src/generator/init.test.ts` → pass (this is the automated half of the dogfood).
+**Verify:** `npx vitest run src/generator/init.test.ts src/generator/reconcile.test.ts` → pass (this is the automated half of the dogfood).
 
 **Steps:**
-- [ ] **Step 1: failing end-to-end test** with a scripted answer stream into `.tmp-test/instance-a`, then run the four checks as assertions.
-- [ ] **Step 2: implement `init.ts`** orchestrating existing pieces.
-- [ ] **Step 3: register in `cli.ts`.**
-- [ ] **Step 4: green, commit** `feat(cli): init orchestrates interview and generation`.
+- [ ] **Step 1: failing e2e test** — scripted answer stream into `.tmp-test/instance-a` (empty), then the four checks as assertions.
+- [ ] **Step 2: failing reconciliation test** — the sentinel scenario above, plus an `adopt-existing` scenario asserting `docs/architecture.md` gained the boundary paragraph and no collision path was written.
+- [ ] **Step 3: implement `reconcile.ts`** (pure: takes the dry render report + `existingAssets` + chosen strategy → a concrete write plan) and `init.ts` orchestrating existing pieces.
+- [ ] **Step 4: register in `cli.ts`** with the `--on-conflict` option.
+- [ ] **Step 5: green, commit** `feat(cli): init with non-destructive conflict reconciliation`.
 
 ---
 
@@ -1803,6 +1828,7 @@ _TODO: describe ceremonies, decision rights, and on-call._
 - [ ] `resume` reads `team-profile.yaml`, re-runs the engine seeded with saved answers, asks only questions whose `ask_if` now differs or that are unanswered, re-writes outputs + re-renders.
 - [ ] `review` replays the three gates from `team-profile.yaml` read-only and exits 0 — writes nothing.
 - [ ] `upgrade` re-renders plumbing only — `.github/workflows/`, `evals/gates.yaml`, `index.lock` chunk config, `SETUP.md` — and never touches `kb/`, `agents/`, `personas/`, `skills/`, `catalog/`. Prints a diff summary.
+- [ ] `upgrade` passes `priorManifest` to `renderTree`; a plumbing file the operator hand-edited is a `collision` — reported as "upgrade skipped `<path>` (locally modified); diff in `<path>.team-ai-new`", never overwritten.
 - [ ] `upgrade` bumps a `team_ai_version` field in `team-profile.yaml`.
 
 **Verify:** `npx vitest run src/generator/resume.test.ts src/generator/review.test.ts src/generator/upgrade.test.ts` → pass.
@@ -1933,8 +1959,9 @@ Run the generator against itself twice — first with the real Arcwright repo as
 - Modify: whichever framework files the findings require (expected: template polish, `why` text, `doctor` messages, preflight signal list)
 
 **Acceptance Criteria:**
-- [ ] **Run A (Arcwright):** `team-ai init --dir .tmp-dogfood/arcwright` with preflight pointed at `C:\Users\nicke\OneDrive\Desktop\arcwright` (a real repo with `AGENTS.md`, `CLAUDE.md`, `.claude/`, `.mcp.json`). Preflight MUST report `extend` with the rationale naming those files. Capture the printed report.
+- [ ] **Run A (Arcwright):** `team-ai init --dir .tmp-dogfood/arcwright` with preflight pointed at `C:\Users\nicke\OneDrive\Desktop\arcwright` (a real repo with `AGENTS.md`, `CLAUDE.md`, `.claude/`, `.mcp.json`). Preflight MUST report `extend` with the rationale naming those files AND list `existingAssets` (the Arcwright `AGENTS.md` as `agentConfigFile`, plus any `.claude/agents/*`). Capture the printed report.
 - [ ] Run A answers use the `engineering` preset, team size 4–8, surfaces "coding agent" only. Generated dir MUST: pass `team-ai validate-kb`, `team-ai validate-citations`, `team-ai reindex` (chunks > 0), `team-ai search "<a term from a seed doc>"` (≥ 1 hit, cited), `team-ai assemble-manifest --check`, `team-ai doctor` (prints remaining items, exit 0).
+- [ ] **Run A reconciliation check:** before the run, copy Arcwright's real `AGENTS.md` into `.tmp-dogfood/arcwright/AGENTS.md` and seed `.tmp-dogfood/arcwright/agents/sme.yaml` with `# HAND AUTHORED SENTINEL`. Run `init` with `--on-conflict adopt-existing`. Assert: `AGENTS.md` and `agents/sme.yaml` are byte-identical (sha256) before and after; no `agents/sme.yaml` collision was written; `.tmp-dogfood/arcwright/docs/architecture.md` contains a "coexistence boundary" paragraph naming `AGENTS.md` and `agents/sme.yaml`. Then repeat with `--on-conflict siblings` into a clean copy and assert `agents/sme.yaml.team-ai-new` appears while the sentinel file is untouched.
 - [ ] Run A generated `.github/workflows/*` are syntactically valid YAML and reference the reusable workflows.
 - [ ] **Run B (Partner Solutions):** `team-ai init --dir .tmp-dogfood/partner-solutions`, `generic-partner-facing` preset, team size 1–3 (so `agents.roles` is suppressed and only domain agents are offered — architecture §12.3 / interview-spec §5), surfaces "coding agent" + "chat apps" + "read-only stakeholders", external consumers = yes (forces sensitivity tiers on and the reader scope — interview-spec §5), `arch.hosting` left at default `no-server`. Generated `docs/architecture.md` MUST contain both gate-condition notes (local stdio; remote after 2 asks).
 - [ ] Run B generated dir passes the same six command checks as Run A.
@@ -2040,7 +2067,7 @@ Expected: all green; help lists every command; tag and branch created.
 | Dogfood | 39 |
 | Definition of done | 40 |
 
-Design §3 overrides all reflected. The one added question (`ctx.org_path`) is in Task 20 and flagged. No spec section is uncovered.
+Design §3 overrides all reflected. The one added question (`ctx.org_path`) is in Task 20 and flagged. Design §18 (non-destructive generation + reconciliation) is covered by Tasks 23 (`existingAssets`), 27 (collision classification, no delete/overwrite), 32 (`--on-conflict` prompt), and 39 Run A (proof against real Arcwright files). No spec section is uncovered.
 
 **2. Placeholder scan** — the CI `validate` job in Task 3 is explicitly a placeholder *with the exact replacement given in Task 17 Step 5*. Template `.hbs` bodies are illustrated with at least one full example each (Tasks 20, 28); remaining template files are enumerated with their required rendered-output assertions, which is the spec an executor needs. No "TBD"/"handle edge cases"/"similar to Task N" left.
 
