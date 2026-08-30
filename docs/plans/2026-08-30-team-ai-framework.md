@@ -4,7 +4,7 @@
 
 **Goal:** Build `team-ai`, a forkable TypeScript framework whose guided interview + idempotent generator produces a working, CI-green, team-owned AI capability (knowledge base, agents, deterministic scripts, eval harness) without shipping any team's content.
 
-**Architecture:** A single npm package exposing a `team-ai` CLI (`init | spoke | attach | doctor | resume | review | upgrade | emit`) and a thin Claude skill, both driven by one `src/interview/questions.yaml`. Deterministic core modules (`schema`, `kb`, `retrieval`, `commands`, `catalog`) do all real work with **zero model calls**. The interview writes `team-profile.yaml` and gate docs; the generator renders `templates/{instance,spoke,attach,mcp-server}` via Handlebars. Retrieval hides behind one interface with only the `lexical` (SQLite FTS5) driver implemented; the other five are honest `NotImplementedError` stubs.
+**Architecture:** A single npm package exposing a `team-ai` CLI (`init | adopt | spoke | attach | doctor | resume | review | upgrade | emit`) and a thin Claude skill, both driven by one `src/interview/questions.yaml`. Deterministic core modules (`schema`, `kb`, `retrieval`, `commands`, `catalog`, `adopt`) do all real work with **zero model calls**. The interview writes `team-profile.yaml` and gate docs; the generator renders `templates/{instance,spoke,attach,mcp-server}` via Handlebars. `adopt` measures an existing repo against the framework standard and emits a deterministic, reviewable remediation plan applied only on explicit per-item approval. Retrieval hides behind one interface with only the `lexical` (SQLite FTS5) driver implemented; the other five are honest `NotImplementedError` stubs.
 
 **Tech Stack:** TypeScript, Node 22, npm, Vitest, ESLint (flat) + Prettier, lefthook + commitlint, `ajv`, `gray-matter` + `yaml`, `better-sqlite3`, `commander` + `@inquirer/prompts`, `handlebars`, GitHub Actions, gitleaks.
 
@@ -20,6 +20,7 @@
 - Dogfood order: "dogfood with Arcwright, then with the Partner Solutions team".
 - One new interview question allowed and flagged: `ctx.org_path` (design §7). No other new questions without raising them.
 - Where the prompt and the companion docs disagree, the prompt wins (design §3).
+- "Full advisory flow" for adopting an existing repo, folded into v1 — kept **deterministic** (no model): `team-ai adopt` produces a reviewable remediation plan; `--interactive` collects per-item approvals; `--apply` applies only approved items (design §18.1, Tasks 41–44). The one qualitative judgment (does the structure serve the team) is delegated to the repo's existing SME.
 
 ---
 
@@ -70,6 +71,8 @@ Files are grouped by responsibility. Each `src/**` file has one job and its own 
 | `src/generator/render.ts` | Idempotent Handlebars tree render; `--dry-run` |
 | `src/generator/{init,spoke,attach,resume,review,upgrade}.ts` | Generator commands |
 | `src/emit/{claude-code,mcp-only,generic}.ts`, `src/emit/index.ts` | Emitters → `emitted/` |
+| `src/adopt/{infer,backfill,git-owner,namespaces,plan,gap,interactive,apply}.ts` | Deterministic existing-repo adoption (design §18.1) |
+| `src/commands/adopt.ts`, `schemas/adoption-plan.schema.json` | `team-ai adopt` command + plan schema |
 | `templates/instance/**`, `templates/spoke/**`, `templates/attach/**`, `templates/mcp-server/**` | Handlebars template trees |
 | `skills/scaffold-interview/SKILL.md` | In-Claude interview runtime |
 | `docs/quality-bar.md`, `docs/dogfood-notes.md` | Quality bar + dogfood findings |
@@ -1946,23 +1949,176 @@ _TODO: describe ceremonies, decision rights, and on-call._
 
 ---
 
+## Milestone J2 — Adopting an existing repo (`team-ai adopt`)
+
+All four tasks are deterministic — **no model calls** (design §18.1).
+
+### Task 41: Front-matter inference and backfill transform
+
+**Goal:** Given a doc with no `team-ai` front matter, deterministically propose a schema-valid front-matter block and insert it without merging into an existing header.
+
+**Files:**
+- Create: `src/adopt/infer.ts`, `src/adopt/backfill.ts`, `src/adopt/types.ts`, `src/adopt/git-owner.ts`
+- Test: `src/adopt/infer.test.ts`, `src/adopt/backfill.test.ts`
+
+**Acceptance Criteria:**
+- [ ] `inferFrontmatter({ relPath, body, namespace, gitAuthors, horizonDays, today })` returns a `FrontMatter` object: `id` = `` `${namespace}.${relPath without ext, segments slugified, joined by "."}` ``; `title` = first `^# ` heading, else title-cased basename; `owner` = most frequent entry in `gitAuthors` (ties → first alphabetically; empty → `"unknown"`); `review_by` = `today + horizonDays` as `YYYY-MM-DD`; `sensitivity` = `"internal"`; `status` = `"active"`; `source` = `` `synced:${system}` `` when `body` head (first 8 lines) matches `/do not edit|edit in (\w+) and re-?sync|^> Source:/i` (system = the captured word lowercased, or `"external"`), else `"authored"`; `tags` = values from a `^\*\*Tags:\*\*\s*(.+)$` line split on comma, else `[]`; `supersedes` = `[]`.
+- [ ] The returned object passes `validate("frontmatter", …)`.
+- [ ] `getGitAuthors(path, root)` shells `git -C <root> log --format=%an -- <path>` and returns `string[]` (empty on error / untracked — never throws).
+- [ ] `applyFrontmatter(absPath, fm, { dryRun })`: if the file starts with `---\n` → **conflict**, return `{ ok: false, reason: "existing front matter" }`, no write. Else prepend `serializeFrontmatter(fm, body)`. `dryRun` returns the would-be content without writing.
+- [ ] No deletes; only prepends to files that have no front matter.
+
+**Verify:** `npx vitest run src/adopt/infer.test.ts src/adopt/backfill.test.ts` → pass.
+
+**Steps:**
+- [ ] **Step 1: failing `infer.test.ts`**
+
+```ts
+import { describe, expect, it } from "vitest";
+import { inferFrontmatter } from "./infer.js";
+
+const base = { namespace: "architecture", gitAuthors: ["Nico", "Nico", "Sam"], horizonDays: 180, today: new Date("2026-08-30") };
+
+describe("inferFrontmatter", () => {
+  it("derives id from path and title from the H1", () => {
+    const fm = inferFrontmatter({ ...base, relPath: "architecture/01-overview.md", body: "# System Architecture Overview\n\ntext" });
+    expect(fm.id).toBe("architecture.architecture.01-overview");
+    expect(fm.title).toBe("System Architecture Overview");
+    expect(fm.owner).toBe("Nico");
+    expect(fm.review_by).toBe("2027-02-26");
+  });
+  it("detects a synced source from an 'edit in Notion' header", () => {
+    const fm = inferFrontmatter({ ...base, relPath: "a/b.md", body: "> Source: artifact\n> Do not edit this file directly; edit in Notion and re-sync.\n\n# B" });
+    expect(fm.source).toBe("synced:notion");
+  });
+});
+```
+
+- [ ] **Step 2: implement** `git-owner.ts`, `infer.ts`, `backfill.ts`.
+- [ ] **Step 3: failing `backfill.test.ts`** — a file with no front matter gets the block prepended (dry-run returns it); a file already starting `---` returns a conflict and is untouched.
+- [ ] **Step 4: green, commit** `feat(adopt): deterministic front-matter inference and backfill`.
+
+---
+
+### Task 42: Namespace mapping candidate matcher
+
+**Goal:** Map a repo's top-level docs folders to framework namespaces deterministically; surface unmatched folders as human decisions with ranked candidates.
+
+**Files:**
+- Create: `src/adopt/namespaces.ts`
+- Test: `src/adopt/namespaces.test.ts`
+
+**Acceptance Criteria:**
+- [ ] `proposeNamespaceMap(folders: string[], presetShape: string[])` returns `{ matched: { folder: string; namespace: string }[]; unmatched: { folder: string; candidates: string[] }[] }`.
+- [ ] Match order: exact; singular/plural (`decisions`↔`decision`); a fixed synonym table (`arch`→`architecture`, `adr`/`adrs`→`decisions`, `runbooks`→`playbooks`, `examples`→`patterns`, `charter`/`team`→`operating`, `guides`→`playbooks`).
+- [ ] Unmatched folders get the 3 closest `presetShape` names by Levenshtein distance, plus `"custom"` always last.
+- [ ] Pure function, deterministic ordering (`matched` sorted by `folder`).
+
+**Verify:** `npx vitest run src/adopt/namespaces.test.ts` → pass, including an Arcwright-shaped input.
+
+**Steps:**
+- [ ] **Step 1: failing test**
+
+```ts
+import { describe, expect, it } from "vitest";
+import { proposeNamespaceMap } from "./namespaces.js";
+
+const shape = ["operating", "platform", "patterns", "playbooks", "decisions", "architecture"];
+
+describe("proposeNamespaceMap", () => {
+  it("matches known folders and flags the rest", () => {
+    const r = proposeNamespaceMap(["architecture", "decisions", "prd", "story-bibles", "conventions"], shape);
+    expect(r.matched).toContainEqual({ folder: "architecture", namespace: "architecture" });
+    expect(r.matched).toContainEqual({ folder: "decisions", namespace: "decisions" });
+    const prd = r.unmatched.find((u) => u.folder === "prd");
+    expect(prd?.candidates.at(-1)).toBe("custom");
+  });
+});
+```
+
+- [ ] **Step 2: implement** (small Levenshtein, no dependency).
+- [ ] **Step 3: green, commit** `feat(adopt): namespace mapping candidate matcher`.
+
+---
+
+### Task 43: `team-ai adopt` — adoption plan generation
+
+**Goal:** Measure an existing repo against the framework standard and write a reviewable plan. Change nothing else.
+
+**Files:**
+- Create: `src/commands/adopt.ts`, `src/adopt/plan.ts`, `src/adopt/gap.ts`, `schemas/adoption-plan.schema.json`, `src/adopt/plan-doc.hbs`
+- Modify: `src/cli.ts`, `src/schema/load.ts` (add `adoption-plan` to `SchemaName`)
+- Test: `src/adopt/plan.test.ts`, `src/adopt/gap.test.ts`
+
+**Acceptance Criteria:**
+- [ ] `team-ai adopt [--root .] [--out .] [--horizon-days 180] [--namespace-map <file>]` runs: `scanPreflight(root)` → `proposeNamespaceMap(topLevelDocFolders, presetShape)` → for every `*.md` under `<root>/docs` (configurable) with no front matter, `inferFrontmatter` (namespace from the matched map, or `"unmapped"` placeholder) → `gapVsQualityBar(root)` → collision list (dry `renderTree(templates/instance)` vs `root`).
+- [ ] `gapVsQualityBar(root)` returns, for each of `#q1`..`#q17`, `{ id, satisfied: boolean, evidence: string, closesWith: string }` using a fixed rule table (e.g. q1 satisfied if `kb/` or `docs/` is markdown-in-git; q5 satisfied if `docs/` has an adversarial-review record; q8 satisfied if a `doctor`-equivalent exists; …). The rule table lives in `src/adopt/gap.ts` and is unit-tested.
+- [ ] Writes `<out>/docs/adoption-plan.md` (from `plan-doc.hbs`) and `<out>/adoption-plan.yaml` (schema-valid). Every backfill item and relabel has `approved: false`; every unmatched folder is an entry under `namespace_decisions` with its candidates.
+- [ ] `adopt` **writes only those two files** — asserted by the test (snapshot the file list before/after).
+- [ ] No model call anywhere; a top-of-file comment on `plan.ts` states this.
+- [ ] `--namespace-map <file>` (a `folder: namespace` YAML) pre-resolves matches so re-runs are stable.
+
+**Verify:** `npx vitest run src/adopt/plan.test.ts src/adopt/gap.test.ts` → pass against a fixture "legacy repo".
+
+**Steps:**
+- [ ] **Step 1: build the fixture** `src/adopt/fixtures/legacy-repo/` — `docs/architecture/a.md` (H1, no front matter), `docs/notes/b.md` (Notion "do not edit" header), `docs/prd/c.md`, plus a `.git`-less dir (mock `getGitAuthors` in tests).
+- [ ] **Step 2: failing `gap.test.ts`** — assert 17 entries, each with `satisfied` boolean + non-empty `closesWith`.
+- [ ] **Step 3: failing `plan.test.ts`** — run `adopt` on the fixture with `--out .tmp-test/adopt`; assert exactly `adoption-plan.md` + `adoption-plan.yaml` created, the yaml validates, lists 3 backfill items (one with `source: synced:notion`), `namespace_decisions` includes `prd` and `notes`, and the fixture repo itself is byte-for-byte unchanged.
+- [ ] **Step 4: implement** `gap.ts`, `plan.ts`, `adopt.ts`, the schema, the hbs doc; register in `cli.ts`.
+- [ ] **Step 5: green, commit** `feat(adopt): deterministic adoption plan generation`.
+
+---
+
+### Task 44: `team-ai adopt --interactive` and `--apply`
+
+**Goal:** Collect per-item approvals, then apply only approved items as deterministic transforms. Never touch an unapproved or conflicting file.
+
+**Files:**
+- Create: `src/adopt/interactive.ts`, `src/adopt/apply.ts`
+- Modify: `src/commands/adopt.ts`, `src/cli.ts`
+- Test: `src/adopt/apply.test.ts`, `src/adopt/interactive.test.ts`
+
+**Acceptance Criteria:**
+- [ ] `team-ai adopt --interactive [--root .]` loads `adoption-plan.yaml`, and for each backfill/relabel item prompts **approve / skip / edit** (`edit` opens the proposed front-matter block in `$EDITOR` or accepts inline text via the injectable prompt source); for each `namespace_decisions` entry prompts a pick from `candidates`. Writes choices back into `adoption-plan.yaml` (`approved: true|false`, `namespace: <chosen>`). Injectable answer source for headless tests.
+- [ ] `team-ai adopt --apply [--root .]` reads `adoption-plan.yaml` and applies **only** items with `approved: true`:
+  - backfill → `applyFrontmatter` (skips + reports any that now conflict);
+  - relabel → add/replace the `source:` key only, via `serializeFrontmatter`, on files the tool is adding front matter to (never rewrites a hand-authored header — conflict instead);
+  - resolved `namespace_decisions` → write/extend `catalog/namespaces/<repo>.yaml`;
+  - optional `move:` items → `fs.rename` + append to a `moved:` log in `adoption-plan.yaml`.
+- [ ] `--apply` is idempotent: an item whose target already has the front matter is reported `already-applied`, not re-written.
+- [ ] After applying, runs `validate-kb --root <root>/docs` (or the mapped roots) and prints the result.
+- [ ] Prints a summary: `applied N / skipped M / conflicts K`. Exit non-zero only if a `conflict` occurred on an `approved` item.
+- [ ] Never deletes; never writes a file not named in an approved plan item.
+
+**Verify:** `npx vitest run src/adopt/apply.test.ts src/adopt/interactive.test.ts` → pass.
+
+**Steps:**
+- [ ] **Step 1: failing `apply.test.ts`** — take the Task 43 fixture plan, mark 2 of 3 backfill items `approved: true`, run `--apply`; assert exactly those 2 docs gained front matter, the 3rd is untouched, `validate-kb` passes on the 2, a second `--apply` reports both `already-applied`.
+- [ ] **Step 2: failing `interactive.test.ts`** — scripted answer source approves 1, skips 1, edits 1 (changes `owner`), picks a namespace for `prd`; assert the yaml reflects all four.
+- [ ] **Step 3: implement** `interactive.ts`, `apply.ts`; wire `--interactive`/`--apply` into `adopt.ts`.
+- [ ] **Step 4: green, commit** `feat(adopt): interactive approval and deterministic apply`.
+
+---
+
 ## Milestone K — Dogfood and release
 
 ### Task 39: Dogfood against Arcwright, then Partner Solutions
 
 **Goal:** **USER-ORDERED GATE — NON-SKIPPABLE.** This task was requested by the user in the current conversation. It MUST NOT be closed by walking around it, by declaring it "verified inline", or by substituting a cheaper check. Close only after every item in acceptance criteria has been re-validated independently, with output captured.
 
-Run the generator against itself twice — first with the real Arcwright repo as the preflight target, then a Partner Solutions profile — prove the outputs work, capture friction, and fix it.
+Run the framework against itself three ways — `team-ai adopt` against the real Arcwright repo, `team-ai init` with Arcwright as the preflight target, and `team-ai init` for a Partner Solutions profile — prove the outputs work, capture friction, and fix it.
 
 **Files:**
 - Create: `docs/dogfood-notes.md`
-- Modify: whichever framework files the findings require (expected: template polish, `why` text, `doctor` messages, preflight signal list)
+- Modify: whichever framework files the findings require (expected: template polish, `why` text, `doctor` messages, preflight signal list, gap-rule table)
 
 **Acceptance Criteria:**
 - [ ] **Run A (Arcwright):** `team-ai init --dir .tmp-dogfood/arcwright` with preflight pointed at `C:\Users\nicke\OneDrive\Desktop\arcwright` (a real repo with `AGENTS.md`, `CLAUDE.md`, `.claude/`, `.mcp.json`). Preflight MUST report `extend` with the rationale naming those files AND list `existingAssets` (the Arcwright `AGENTS.md` as `agentConfigFile`, plus any `.claude/agents/*`). Capture the printed report.
 - [ ] Run A answers use the `engineering` preset, team size 4–8, surfaces "coding agent" only. Generated dir MUST: pass `team-ai validate-kb`, `team-ai validate-citations`, `team-ai reindex` (chunks > 0), `team-ai search "<a term from a seed doc>"` (≥ 1 hit, cited), `team-ai assemble-manifest --check`, `team-ai doctor` (prints remaining items, exit 0).
 - [ ] **Run A reconciliation check:** before the run, copy Arcwright's real `AGENTS.md` into `.tmp-dogfood/arcwright/AGENTS.md` and seed `.tmp-dogfood/arcwright/agents/sme.yaml` with `# HAND AUTHORED SENTINEL`. Run `init` with `--on-conflict adopt-existing`. Assert: `AGENTS.md` and `agents/sme.yaml` are byte-identical (sha256) before and after; no `agents/sme.yaml` collision was written; `.tmp-dogfood/arcwright/docs/architecture.md` contains a "coexistence boundary" paragraph naming `AGENTS.md` and `agents/sme.yaml`. Then repeat with `--on-conflict siblings` into a clean copy and assert `agents/sme.yaml.team-ai-new` appears while the sentinel file is untouched.
 - [ ] Run A generated `.github/workflows/*` are syntactically valid YAML and reference the reusable workflows.
+- [ ] **Run A-adopt (real Arcwright, read-only):** `team-ai adopt --root C:\Users\nicke\OneDrive\Desktop\arcwright --out .tmp-dogfood/arcwright-adopt`. MUST: write only `.tmp-dogfood/arcwright-adopt/docs/adoption-plan.md` + `adoption-plan.yaml` (assert the Arcwright repo tree is byte-for-byte unchanged — `git -C <arcwright> status --porcelain` empty); the plan MUST list front-matter backfill items for `docs/**` files lacking front matter, mark the `docs/architecture/*` "edit in Notion" docs as `source: synced:notion`, include `namespace_decisions` for the folders with no preset match (`prd`, `story-bibles`, `product`, `conventions`), and a 17-line gap-vs-quality-bar table. Capture the rendered `adoption-plan.md` into `docs/dogfood-notes.md`.
+- [ ] **Run A-adopt apply (fixture, not Arcwright):** on `src/adopt/fixtures/legacy-repo`, mark 2 plan items approved, `team-ai adopt --apply` → exactly those 2 files gain front matter, the rest untouched, `validate-kb` passes on the 2, re-run reports `already-applied`.
 - [ ] **Run B (Partner Solutions):** `team-ai init --dir .tmp-dogfood/partner-solutions`, `generic-partner-facing` preset, team size 1–3 (so `agents.roles` is suppressed and only domain agents are offered — architecture §12.3 / interview-spec §5), surfaces "coding agent" + "chat apps" + "read-only stakeholders", external consumers = yes (forces sensitivity tiers on and the reader scope — interview-spec §5), `arch.hosting` left at default `no-server`. Generated `docs/architecture.md` MUST contain both gate-condition notes (local stdio; remote after 2 asks).
 - [ ] Run B generated dir passes the same six command checks as Run A.
 - [ ] Run B: because team size is 1–3, the agent plan (Gate 3 render, captured) MUST show domain subagents only, no role subagents.
@@ -1995,7 +2151,7 @@ Expected: every command exits 0; preflight for Run A prints `Assessment: EXTEND`
 - [ ] **Step 7: delete `.tmp-dogfood/`; commit** `docs: dogfood notes for Arcwright and Partner Solutions runs` (plus any fix commits already made).
 
 ```json:metadata
-{"userGate": true, "tags": ["user-gate"], "requireEvidenceTokens": [["run-a","arcwright","EXTEND"], ["run-b","partner-solutions","no-server"]], "verifyCommand": "npm run build && bash test/dogfood.sh && npm run check && node dist/cli.js check-agnostic", "acceptanceCriteria": ["Run A preflight reports EXTEND naming AGENTS.md/CLAUDE.md/.claude/.mcp.json","Run A generated dir passes validate-kb, validate-citations, reindex (chunks>0), search (cited hit), assemble-manifest --check, doctor","Run B uses generic-partner-facing preset, size 1-3 suppresses role subagents, external consumers forces sensitivity tiers","Run B docs/architecture.md has both server gate-condition notes","Both .tmp-dogfood trees deleted; nothing team-specific committed","docs/dogfood-notes.md records findings + fix SHAs for both runs","npm run check and framework CI jobs pass after fixes","check-agnostic exits 0"]}
+{"userGate": true, "tags": ["user-gate"], "requireEvidenceTokens": [["run-a","arcwright","EXTEND"], ["run-b","partner-solutions","no-server"]], "verifyCommand": "npm run build && bash test/dogfood.sh && npm run check && node dist/cli.js check-agnostic", "acceptanceCriteria": ["Run A preflight reports EXTEND naming AGENTS.md/CLAUDE.md/.claude/.mcp.json and lists existingAssets","Run A generated dir passes validate-kb, validate-citations, reindex (chunks>0), search (cited hit), assemble-manifest --check, doctor","Run A reconciliation: hand-authored AGENTS.md + agents/sme.yaml byte-identical before/after under adopt-existing; siblings mode writes .team-ai-new without touching originals","Run A-adopt: team-ai adopt against real Arcwright writes only adoption-plan.md + adoption-plan.yaml, Arcwright tree unchanged, plan lists front-matter backfill + synced:notion relabels + namespace_decisions + 17-line gap table","Run A-adopt apply on fixture: only the 2 approved files change, validate-kb passes, re-run reports already-applied","Run B uses generic-partner-facing preset, size 1-3 suppresses role subagents, external consumers forces sensitivity tiers","Run B docs/architecture.md has both server gate-condition notes","Both .tmp-dogfood trees deleted; nothing team-specific committed","docs/dogfood-notes.md records findings + fix SHAs; npm run check and framework CI jobs pass after fixes","check-agnostic exits 0"]}
 ```
 
 ---
@@ -2019,7 +2175,7 @@ Verify the Definition of Done line by line, finalize the changelog, tag `v0.1.0`
   - `doctor` accurately reports what's missing
   - quality-bar has an honest answer for every line (Task 37)
 - [ ] Every one of the build prompt's numbered build items (1–11) maps to shipped paths in `docs/definition-of-done.md`.
-- [ ] `npm run check` passes; `npm run build` produces `dist/`; `npx pkg-ok`-style check: `bin/team-ai.js` resolves and `team-ai --help` lists all 8 top-level commands + the validation/eval commands.
+- [ ] `npm run check` passes; `npm run build` produces `dist/`; `npx pkg-ok`-style check: `bin/team-ai.js` resolves and `team-ai --help` lists all 9 top-level commands (`init adopt spoke attach doctor resume review upgrade emit`) + the validation/eval commands.
 - [ ] `CHANGELOG.md` `[0.1.0]` section dated, `[Unreleased]` emptied.
 - [ ] Git tag `v0.1.0` created; `v0` branch created at the same commit (reusable-workflow pin target).
 - [ ] `check-agnostic` exits 0 on the final tree.
@@ -2027,7 +2183,7 @@ Verify the Definition of Done line by line, finalize the changelog, tag `v0.1.0`
 **Verify:**
 ```bash
 npm ci && npm run check && npm run build
-node bin/team-ai.js --help    # lists init, spoke, attach, doctor, resume, review, upgrade, emit, validate-kb, validate-citations, reindex, search, assemble-manifest, freshness-audit, run-evals, validate-spoke, check-agnostic
+node bin/team-ai.js --help    # lists init, adopt, spoke, attach, doctor, resume, review, upgrade, emit, validate-kb, validate-citations, reindex, search, assemble-manifest, freshness-audit, run-evals, validate-spoke, check-agnostic
 node bin/team-ai.js check-agnostic && echo "AGNOSTIC OK"
 git tag v0.1.0 && git branch v0
 ```
@@ -2064,10 +2220,11 @@ Expected: all green; help lists every command; tag and branch created.
 | 9 Eval harness + one example | 15 |
 | 10 Optional local MCP server | 31 |
 | 11 `docs/quality-bar.md` | 37 |
+| Adopt an existing repo (design §18.1) | 41, 42, 43, 44 |
 | Dogfood | 39 |
 | Definition of done | 40 |
 
-Design §3 overrides all reflected. The one added question (`ctx.org_path`) is in Task 20 and flagged. Design §18 (non-destructive generation + reconciliation) is covered by Tasks 23 (`existingAssets`), 27 (collision classification, no delete/overwrite), 32 (`--on-conflict` prompt), and 39 Run A (proof against real Arcwright files). No spec section is uncovered.
+Design §3 overrides all reflected. The one added question (`ctx.org_path`) is in Task 20 and flagged. Design §18 (non-destructive generation + reconciliation) is covered by Tasks 23 (`existingAssets`), 27 (collision classification, no delete/overwrite), 32 (`--on-conflict` prompt), and 39 Run A (proof against real Arcwright files). Design §18.1 (`team-ai adopt`) is Tasks 41–44, exercised against the real Arcwright repo in 39 Run A. All of it is deterministic — no model calls. No spec section is uncovered.
 
 **2. Placeholder scan** — the CI `validate` job in Task 3 is explicitly a placeholder *with the exact replacement given in Task 17 Step 5*. Template `.hbs` bodies are illustrated with at least one full example each (Tasks 20, 28); remaining template files are enumerated with their required rendered-output assertions, which is the spec an executor needs. No "TBD"/"handle edge cases"/"similar to Task N" left.
 

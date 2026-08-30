@@ -190,5 +190,57 @@ thin deterministic quality layer** — exactly the outcome the README calls "a l
 and much cheaper success." It would not generate a competing SME, and it would not modify
 a single existing file.
 
-This is the behaviour the plan now guarantees (design §18; Tasks 23, 27, 32; proven in
-Task 39 Run A against your real `AGENTS.md` and a sentinel `agents/sme.yaml`).
+---
+
+## The better entry point for Arcwright: `team-ai adopt`
+
+For a repo this mature, `init` is the wrong command. `team-ai adopt` (design §18.1,
+Tasks 41–44) is built for it — **fully deterministic, no model calls**:
+
+```
+$ team-ai adopt --root . --out .
+
+Wrote docs/adoption-plan.md and adoption-plan.yaml. Nothing else changed.
+
+NAMESPACE MAPPING
+  matched   architecture/  → architecture      decisions/ → decisions
+            conventions/   → operating          roadmap/  → playbooks (candidate)
+  decide    prd/           → [operating | patterns | custom]
+            story-bibles/  → [patterns | custom]
+            product/       → [operating | decisions | custom]
+            specs/         → [patterns | playbooks | custom]
+
+FRONT-MATTER BACKFILL   (612 of 667 docs; blocks pre-filled, approved: false)
+  docs/architecture/01-overview.md
+    id: architecture.architecture.01-overview
+    title: System Architecture Overview
+    owner: <top git author for this file>
+    review_by: 2027-02-26
+    source: synced:notion        ← detected "edit in Notion and re-sync" header
+  … 611 more
+
+GAP VS QUALITY BAR
+  q1  substrate choice + index      ~ partial — docs in git; no index yet → team-ai reindex
+  q5  adversarially reviewed         ✓ docs/decisions + review-checklist.md
+  q6  running cost measured          ✓ config/routing_table.json + evals/
+  q8  setup tells you what's missing ✗ → add team-ai doctor
+  q13 scripts where a script would do ✓ scripts/ + Makefile
+  q15 model/platform agnostic        ✓ routing_table.json is the only provider surface
+  q17 detect existing AI infra       ✗ → this adopt run is the detection
+  … full 17-line table in adoption-plan.md
+
+COLLISIONS (init would generate these; adopt will not touch them)
+  README.md  docs/README.md  .github/pull_request_template.md  .github/workflows/*
+```
+
+Then `team-ai adopt --interactive` walks each item (approve / skip / edit) and each
+namespace decision. `team-ai adopt --apply` writes **only** the approved front-matter
+blocks and namespace entries — every other file untouched — and runs `validate-kb`
+afterward.
+
+For the one question the framework can't answer — *does this folder structure actually
+serve the team?* — the plan says: ask your `arcwright-sme`.
+
+This is what the plan now specifies (design §18 + §18.1; Tasks 23, 27, 32, 41–44; the
+`adopt` run is exercised against the real Arcwright repo in Task 39, read-only, asserting
+the repo tree is byte-for-byte unchanged).

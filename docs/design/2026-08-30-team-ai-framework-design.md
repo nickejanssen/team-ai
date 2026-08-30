@@ -305,6 +305,44 @@ There is no "overwrite" option and deletion is never offered. `--on-conflict
 `upgrade` already refuses to touch `kb/`, `agents/`, `personas/`, `skills/`,
 `catalog/` and only re-renders plumbing — unchanged.
 
+### 18.1 Adopting an existing repo: `team-ai adopt`
+
+When a repo already has a documentation tree (like Arcwright's `docs/`), `init`'s
+"generate an instance" model is the wrong tool. `team-ai adopt` instead measures the
+existing repo against the framework's own standard and produces a concrete,
+reviewable remediation plan. **It is fully deterministic — no model calls.** The
+framework defines the standard, so the gap is mechanical to compute.
+
+**`team-ai adopt [--root .] [--out .] [--horizon-days 180] [--namespace-map <file>]`**
+produces two files and changes nothing else:
+
+- `docs/adoption-plan.md` — human-readable.
+- `adoption-plan.yaml` — machine-applyable, schema-validated, every item
+  `approved: false` by default.
+
+The plan contains:
+
+| Section | How it's derived (all deterministic) |
+|---|---|
+| **Namespace mapping** | Each top-level docs folder matched to a namespace by exact / singular-plural / synonym-table match. Unmatched folders get 2–3 ranked candidates + `custom` — a **human decision**, never a guess. |
+| **Front-matter backfill** | For every doc with no `team-ai` front matter, the exact block to insert: `id` from path slug, `title` from the first `# H1` (or title-cased filename), `owner` from the most frequent `git log` author, `review_by` = today + `--horizon-days`, `sensitivity: internal`, `status: active`, `source: synced:<system>` when the body header matches an "edit at source" pattern else `authored`, `tags`/`supersedes` empty. |
+| **Relabels** | Docs whose current header indicates a synced source but that lack `source:`. |
+| **Gap vs quality bar** | Each of the 17 `docs/quality-bar.md` lines mapped to a detectable condition: satisfied / not, and the exact command or file that closes each gap. |
+| **Collisions** | Files `init` would generate that already exist (dry render vs `templates/instance`). |
+| **Qualitative review pointer** | "For whether this structure serves the team, ask your existing SME" — the one judgment call the framework does not make. |
+
+**`team-ai adopt --interactive`** walks each plan item (approve / skip / edit) and each
+unmatched namespace folder, writing the choices back into `adoption-plan.yaml`.
+
+**`team-ai adopt --apply`** applies only `approved: true` items — each a deterministic
+transform (insert a front-matter block, add a namespace to `catalog/`, optionally
+`fs.rename` a file with a recorded `moved:` log). It never touches an unapproved file
+or one whose existing header conflicts; it is idempotent (applied items are skipped on
+re-run); it runs `validate-kb` afterward and reports.
+
+The non-destructive guarantees of §18 hold throughout: no deletes, no overwrite of a
+file the framework did not create, nothing written without explicit approval.
+
 ## 19. Open items carried into planning
 
 - Whether the agnosticism denylist grep lives in `ci.yml` or as a `src/commands` check
