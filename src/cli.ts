@@ -1,8 +1,9 @@
 import { pathToFileURL } from "node:url";
 
-import { Command } from "commander";
+import { Command, Option } from "commander";
 
 import * as assembleManifest from "./commands/assemble-manifest.js";
+import * as freshnessAudit from "./commands/freshness-audit.js";
 import * as reindex from "./commands/reindex.js";
 import * as search from "./commands/search.js";
 import * as validateCitations from "./commands/validate-citations.js";
@@ -85,6 +86,22 @@ export function buildProgram(): Command {
         .option("--check", "verify manifest.yaml is current without writing it", false);
     },
     run: assembleManifest.run,
+  });
+
+  registerCommand(program, {
+    name: "freshness-audit",
+    description: "Report stale, orphaned, and unowned knowledge-base documents as JSON",
+    configure: (command) => {
+      command
+        .option("--root <dir>", "knowledge-base root directory", "kb")
+        .option("--fail-on-stale", "exit non-zero when stale documents exist", false)
+        .option("--open-issues", "draft GitHub issues for stale docs (dry run only)", false)
+        .option("--repo <owner/name>", "target repository for --open-issues live mode")
+        .addOption(
+          new Option("--today <YYYY-MM-DD>", "override today's date (testing)").hideHelp(),
+        );
+    },
+    run: freshnessAudit.run,
   });
 
   // `search` takes a positional argument, which the shared helper does not

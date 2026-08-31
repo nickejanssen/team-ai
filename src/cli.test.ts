@@ -18,6 +18,7 @@ describe("buildProgram", () => {
     expect(names).toContain("reindex");
     expect(names).toContain("search");
     expect(names).toContain("assemble-manifest");
+    expect(names).toContain("freshness-audit");
   });
 
   it("declares the search positional argument", () => {
