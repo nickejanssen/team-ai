@@ -1,0 +1,17 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0] - 2026-08-30
+
+### Added
+
+- Initial framework: guided interview, generator, deterministic scripts, lexical retrieval adapter, catalogs, agent/skill/persona templates, eval harness, optional local stdio MCP server template, and the deterministic `team-ai adopt` flow for existing repos.
+
+[Unreleased]: https://github.com/nickejanssen/team-ai/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/nickejanssen/team-ai/releases/tag/v0.1.0

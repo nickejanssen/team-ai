@@ -5,3 +5,7 @@ package-lock.json
 templates/**/*.hbs
 docs/plans
 *.md
+LICENSE
+NOTICE
+CODEOWNERS
+*.toml
