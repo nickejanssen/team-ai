@@ -15,6 +15,13 @@ describe("buildProgram", () => {
     const names = program.commands.map((c) => c.name()).sort();
     expect(names).toContain("validate-kb");
     expect(names).toContain("validate-citations");
+    expect(names).toContain("reindex");
+    expect(names).toContain("search");
+  });
+
+  it("declares the search positional argument", () => {
+    const searchCommand = buildProgram().commands.find((c) => c.name() === "search");
+    expect(searchCommand?.usage()).toContain("<query>");
   });
 
   it("reports the package version", () => {

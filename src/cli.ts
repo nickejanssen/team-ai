@@ -2,6 +2,8 @@ import { pathToFileURL } from "node:url";
 
 import { Command } from "commander";
 
+import * as reindex from "./commands/reindex.js";
+import * as search from "./commands/search.js";
 import * as validateCitations from "./commands/validate-citations.js";
 import * as validateKb from "./commands/validate-kb.js";
 import { packageVersion } from "./version.js";
@@ -15,6 +17,15 @@ interface CommandRegistration<Options> {
   description: string;
   configure: (command: Command) => void;
   run: (opts: Options) => Promise<number>;
+}
+
+// Commander option collector for a repeatable, comma-splittable `--namespace`.
+function collectNamespace(value: string, previous: string[]): string[] {
+  const parts = value
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  return previous.concat(parts);
 }
 
 function registerCommand<Options>(
@@ -54,6 +65,34 @@ export function buildProgram(): Command {
     },
     run: validateCitations.run,
   });
+
+  registerCommand(program, {
+    name: "reindex",
+    description: "Rebuild the retrieval index for an instance directory",
+    configure: (command) => {
+      command.option("--root <dir>", "instance root directory containing kb/", ".");
+    },
+    run: reindex.run,
+  });
+
+  // `search` takes a positional argument, which the shared helper does not
+  // model, so it is registered directly.
+  program
+    .command("search")
+    .description("Query the retrieval index and print ranked hits")
+    .argument("<query>", "search query text")
+    .option("--root <dir>", "instance root directory containing kb/", ".")
+    .option("--k <n>", "maximum number of hits", (value) => Number.parseInt(value, 10), 8)
+    .option(
+      "--namespace <ns>",
+      "restrict to namespace(s); repeatable or comma-separated",
+      collectNamespace,
+      [],
+    )
+    .option("--json", "emit the raw Hit[] as JSON", false)
+    .action(async (query: string, opts: search.SearchCommandOptions) => {
+      process.exit(await search.run(query, opts));
+    });
 
   return program;
 }
