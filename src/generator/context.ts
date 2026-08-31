@@ -54,7 +54,10 @@ export function buildContext(
   const team: TeamBlock = {
     name,
     mission: asString(eff["team.mission"]),
-    slug: slug(name),
+    // A single token: seed-doc ids are `<slug>.<namespace>.<name>` and the id
+    // pattern forbids `-` and `_` in the first segment, so a multi-word team
+    // name must collapse to one run of `[a-z0-9]`.
+    slug: slug(name).replace(/-/g, ""),
     size: asString(eff["team.size"], "4-8"),
   };
 

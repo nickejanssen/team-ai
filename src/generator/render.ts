@@ -34,6 +34,13 @@ export interface RenderTreeOptions {
   dryRun?: boolean;
   priorManifest?: GeneratedEntry[];
   onCollision?: CollisionMode;
+  /**
+   * Template-relative path prefixes (POSIX, e.g. `"kb/"`) to skip entirely.
+   * A prefix ending in `/` matches a subtree; otherwise it is an exact
+   * template-relative match. Used by `init` to omit the `kb/` seed subtree
+   * when the operator declined seeding.
+   */
+  exclude?: string[];
 }
 
 const HBS_EXT = ".hbs";
@@ -205,6 +212,11 @@ export async function renderTree(opts: RenderTreeOptions): Promise<RenderResult>
   const { templateDir, destDir, context } = opts;
   const dryRun = opts.dryRun ?? false;
   const onCollision: CollisionMode = opts.onCollision ?? "report";
+  const exclude = opts.exclude ?? [];
+  const isExcluded = (templateRel: string): boolean =>
+    exclude.some((prefix) =>
+      prefix.endsWith("/") ? templateRel.startsWith(prefix) : templateRel === prefix,
+    );
   const destResolved = resolve(destDir);
   const priorByPath = new Map<string, string>();
   for (const entry of opts.priorManifest ?? []) priorByPath.set(entry.path, entry.sha256);
@@ -227,6 +239,8 @@ export async function renderTree(opts: RenderTreeOptions): Promise<RenderResult>
   };
 
   for (const templateRel of walkFiles(templateDir)) {
+    if (isExcluded(templateRel)) continue;
+
     const base = templateRel.split("/").pop() ?? templateRel;
 
     if (base === KEEP_FILE) {
