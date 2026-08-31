@@ -68,13 +68,14 @@ describe("self checks", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("parses the shipped question bank and skips not-yet-built pieces", () => {
+  it("parses the shipped question bank and finds the templates tree", () => {
     const questions = checkQuestionsYaml(process.cwd());
     const templates = checkTemplatesDir(process.cwd());
     expect(questions.ok).toBe(true);
     expect(questions.skipped).toBeFalsy();
     expect(templates.ok).toBe(true);
-    expect(templates.skipped).toBe(true);
+    expect(templates.skipped).toBeFalsy();
+    expect(templates.note).toMatch(/entr/);
   });
 });
 

@@ -16,8 +16,8 @@ describe("doctor --self", () => {
     expect(printed()).toContain("✓ schemas load and Ajv-compile");
   });
 
-  it("fails not-built-yet items under --strict", async () => {
-    expect(await run({ self: true, strict: true })).toBe(1);
+  it("passes --strict now that every framework piece is built", async () => {
+    expect(await run({ self: true, strict: true })).toBe(0);
   });
 });
 
