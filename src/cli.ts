@@ -8,6 +8,7 @@ import * as reindex from "./commands/reindex.js";
 import * as search from "./commands/search.js";
 import * as validateCitations from "./commands/validate-citations.js";
 import * as validateKb from "./commands/validate-kb.js";
+import * as validateSpoke from "./commands/validate-spoke.js";
 import { packageVersion } from "./version.js";
 
 // Each command module owns its option parsing and exposes a single
@@ -66,6 +67,15 @@ export function buildProgram(): Command {
       command.option("--root <dir>", "repository root containing kb/ and/or agents/", ".");
     },
     run: validateCitations.run,
+  });
+
+  registerCommand(program, {
+    name: "validate-spoke",
+    description: "Check a spoke repo against the spoke contract",
+    configure: (command) => {
+      command.option("--root <dir>", "spoke repo root directory", ".");
+    },
+    run: validateSpoke.run,
   });
 
   registerCommand(program, {

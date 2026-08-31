@@ -15,6 +15,7 @@ describe("buildProgram", () => {
     const names = program.commands.map((c) => c.name()).sort();
     expect(names).toContain("validate-kb");
     expect(names).toContain("validate-citations");
+    expect(names).toContain("validate-spoke");
     expect(names).toContain("reindex");
     expect(names).toContain("search");
     expect(names).toContain("assemble-manifest");
