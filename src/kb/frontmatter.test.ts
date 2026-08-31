@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
 
 import { parseFrontmatter, serializeFrontmatter } from "./frontmatter.js";
 
@@ -35,6 +36,16 @@ describe("parseFrontmatter", () => {
     expect(data.review_by).toBe("2027-06-30");
   });
 
+  it("keeps a BARE (unquoted) date scalar as a string, not a Date", () => {
+    // Protects the custom `engines.yaml` config: gray-matter's default js-yaml
+    // engine would coerce this to a Date object.
+    const raw = "---\nreview_by: 2027-03-15\n---\nbody\n";
+    const { data } = parseFrontmatter(raw);
+    expect(typeof data.review_by).toBe("string");
+    expect(data.review_by instanceof Date).toBe(false);
+    expect(data.review_by).toBe("2027-03-15");
+  });
+
   it("returns empty data for a doc with no front matter", () => {
     const { data, body } = parseFrontmatter("# Just a heading\n");
     expect(data).toEqual({});
@@ -67,6 +78,28 @@ describe("serializeFrontmatter", () => {
     expect(out.startsWith("---\n")).toBe(true);
     expect(out).toContain("---\n\nBody\n");
     expect(out.endsWith("\n")).toBe(true);
+  });
+
+  it("force-quotes ISO-date string scalars so YAML-1.1 consumers keep them strings", () => {
+    const out = serializeFrontmatter(
+      {
+        id: "kb.a.b",
+        review_by: "2027-01-01",
+        created_at: "2027-01-01T09:30:00Z",
+        title: "Not a date",
+      },
+      "body\n",
+    );
+    expect(out).toContain('review_by: "2027-01-01"');
+    expect(out).toContain('created_at: "2027-01-01T09:30:00Z"');
+    expect(out).toContain("title: Not a date");
+
+    // A YAML-1.1 consumer (js-yaml, GitHub) reads the quoted scalars as strings.
+    const body = out.split("---\n")[1] ?? "";
+    const reparsed = parseYaml(body, { schema: "yaml-1.1" }) as Record<string, unknown>;
+    expect(typeof reparsed.review_by).toBe("string");
+    expect(reparsed.review_by).toBe("2027-01-01");
+    expect(reparsed.created_at instanceof Date).toBe(false);
   });
 });
 

@@ -16,24 +16,51 @@ export class KbValidationError extends Error {
 }
 
 const HEADING = /^(#{1,6})\s+(.+)$/;
+const FENCE = /^(```|~~~)/;
 
 function toPosix(relPath: string): string {
   return relPath.split(/[\\/]/).join("/");
 }
 
+function byPath(a: string, b: string): number {
+  return a.localeCompare(b);
+}
+
+// Extract ATX headings in document order, ignoring heading-looking lines inside
+// fenced code blocks. The chunker reuses this behaviour.
 function extractHeadings(body: string): string[] {
-  return body.split("\n").flatMap((line) => {
+  const headings: string[] = [];
+  let inFence = false;
+  for (const line of body.split("\n")) {
+    if (FENCE.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
     const match = HEADING.exec(line);
-    return match?.[2] ? [match[2].trim()] : [];
-  });
+    if (match?.[2]) headings.push(match[2].trim());
+  }
+  return headings;
+}
+
+async function listMarkdown(root: string): Promise<string[]> {
+  let entries: string[];
+  try {
+    entries = await readdir(root, { recursive: true });
+  } catch (err) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") {
+      throw new Error(`KB root not found: ${root}`);
+    }
+    throw err;
+  }
+  return entries
+    .filter((entry) => entry.endsWith(".md"))
+    .map(toPosix)
+    .sort(byPath);
 }
 
 export async function loadKb(root: string): Promise<KbDoc[]> {
-  const entries = await readdir(root, { recursive: true });
-  const markdown = entries
-    .filter((entry) => entry.endsWith(".md"))
-    .map(toPosix)
-    .sort();
+  const markdown = await listMarkdown(root);
 
   const docs: KbDoc[] = [];
   const failures: { file: string; error: string }[] = [];
@@ -58,5 +85,5 @@ export async function loadKb(root: string): Promise<KbDoc[]> {
 
   if (failures.length > 0) throw new KbValidationError(failures);
 
-  return docs.sort((a, b) => a.path.localeCompare(b.path));
+  return docs.sort((a, b) => byPath(a.path, b.path));
 }

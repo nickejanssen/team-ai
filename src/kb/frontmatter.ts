@@ -1,9 +1,29 @@
 import matter from "gray-matter";
-import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import { Document, parse as parseYaml, visit } from "yaml";
 
 export interface ParsedDoc {
   data: Record<string, unknown>;
   body: string;
+}
+
+// Matches ISO-8601 date / date-time scalars (e.g. `2027-01-01`, `2027-01-01T09:00:00Z`).
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ][\d:.+-]*(Z)?)?$/;
+
+// Serialize front matter with the `yaml` package, force-quoting any string that
+// looks like an ISO date. The `yaml` core schema keeps bare `2027-01-01` as a
+// string, but YAML-1.1 consumers (js-yaml, GitHub) re-coerce it to a timestamp;
+// quoting keeps the value a string wherever a serialized doc is later read.
+// Note: YAML comments and anchors in front matter are NOT preserved on round-trip.
+function stringifyFrontmatterYaml(value: object): string {
+  const doc = new Document(value);
+  visit(doc, {
+    Scalar(_key, node) {
+      if (typeof node.value === "string" && ISO_DATE.test(node.value)) {
+        node.type = "QUOTE_DOUBLE";
+      }
+    },
+  });
+  return doc.toString();
 }
 
 // Parse and serialize both go through the `yaml` package so the two operations
@@ -16,7 +36,7 @@ const engines = {
       const parsed: unknown = parseYaml(input);
       return parsed !== null && typeof parsed === "object" ? parsed : {};
     },
-    stringify: (input: object): string => stringifyYaml(input),
+    stringify: (input: object): string => stringifyFrontmatterYaml(input),
   },
 };
 
@@ -54,5 +74,5 @@ export function serializeFrontmatter(data: Record<string, unknown>, body: string
   for (const key of Object.keys(data)) {
     if (!Object.prototype.hasOwnProperty.call(ordered, key)) ordered[key] = data[key];
   }
-  return `---\n${stringifyYaml(ordered)}---\n\n${body.replace(/^\s+/, "")}\n`;
+  return `---\n${stringifyFrontmatterYaml(ordered)}---\n\n${body.replace(/^\s+/, "")}\n`;
 }

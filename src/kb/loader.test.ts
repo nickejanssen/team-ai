@@ -47,8 +47,34 @@ describe("loadKb", () => {
     expect(rateLimits?.headings).toEqual(["Defaults", "Handling 429s", "Backoff", "Escalation"]);
   });
 
+  it("does not capture heading-looking lines inside fenced code blocks", async () => {
+    const docs = await loadKb("src/kb/fixtures/kb");
+    const auth = docs.find((d) => d.path === "platform/auth.md");
+    expect(auth?.headings).toEqual(["Token Types", "Rotation", "Schedule", "Revocation"]);
+    expect(auth?.headings.some((h) => h.includes("shell comment"))).toBe(false);
+  });
+
+  it("keeps a bare (unquoted) front matter date as a string through the loader", async () => {
+    const docs = await loadKb("src/kb/fixtures/kb");
+    // src/kb/fixtures/kb/platform/auth.md uses `review_by: 2027-03-15` (bare).
+    const auth = docs.find((d) => d.path === "platform/auth.md");
+    expect(typeof auth?.frontmatter.review_by).toBe("string");
+    expect(auth?.frontmatter.review_by).toBe("2027-03-15");
+  });
+
   it("ignores non-markdown files", async () => {
     const docs = await loadKb("src/kb/fixtures/kb");
     expect(docs.every((d) => d.path.endsWith(".md"))).toBe(true);
+  });
+
+  it("throws a friendly error when the root does not exist", async () => {
+    await expect(loadKb("src/kb/fixtures/does-not-exist")).rejects.toThrow(
+      /KB root not found: src[\\/]kb[\\/]fixtures[\\/]does-not-exist/,
+    );
+  });
+
+  it("returns an empty array for an existing but empty root", async () => {
+    const docs = await loadKb("src/kb/fixtures/kb-empty");
+    expect(docs).toEqual([]);
   });
 });
