@@ -10,7 +10,7 @@ import addFormatsModule from "ajv-formats";
 // import resolves to the module namespace; the callable plugin is `.default`.
 const addFormats = addFormatsModule.default;
 
-export type SchemaName = "frontmatter" | "agent" | "manifest" | "spoke" | "team-profile";
+export type SchemaName = "frontmatter" | "agent" | "manifest" | "spoke" | "team-profile" | "golden";
 
 const ajv = addFormats(new Ajv2020({ allErrors: true, strict: true }));
 

@@ -5,6 +5,7 @@ import { Command, Option } from "commander";
 import * as assembleManifest from "./commands/assemble-manifest.js";
 import * as freshnessAudit from "./commands/freshness-audit.js";
 import * as reindex from "./commands/reindex.js";
+import * as runEvals from "./commands/run-evals.js";
 import * as search from "./commands/search.js";
 import * as validateCitations from "./commands/validate-citations.js";
 import * as validateKb from "./commands/validate-kb.js";
@@ -112,6 +113,18 @@ export function buildProgram(): Command {
         );
     },
     run: freshnessAudit.run,
+  });
+
+  registerCommand(program, {
+    name: "run-evals",
+    description: "Replay the golden eval set: hit rate, routing accuracy, refusal, tier ceiling",
+    configure: (command) => {
+      command
+        .option("--root <dir>", "instance root directory", ".")
+        .option("--golden <dir>", "golden set directory, relative to --root", "evals/golden")
+        .option("--json", "emit the EvalReport as JSON instead of a table", false);
+    },
+    run: runEvals.run,
   });
 
   // `search` takes a positional argument, which the shared helper does not

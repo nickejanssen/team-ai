@@ -59,6 +59,16 @@ export interface Manifest {
   domains: ManifestDomain[];
 }
 
+export interface GoldenQuestion {
+  id: string;
+  question: string;
+  expect_namespace: string;
+  expect_paths: string[];
+  expect_route: string;
+  expect_tier_max: ModelTier;
+  must_cite: boolean;
+}
+
 export interface SpokeDomain {
   id: string;
   description: string;

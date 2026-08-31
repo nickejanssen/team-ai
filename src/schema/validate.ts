@@ -1,5 +1,12 @@
 import { loadValidator, type SchemaName } from "./load.js";
-import type { AgentDef, FrontMatter, Manifest, SpokeConfig, TeamProfile } from "./types.js";
+import type {
+  AgentDef,
+  FrontMatter,
+  GoldenQuestion,
+  Manifest,
+  SpokeConfig,
+  TeamProfile,
+} from "./types.js";
 
 export interface SchemaTypeMap {
   frontmatter: FrontMatter;
@@ -7,6 +14,7 @@ export interface SchemaTypeMap {
   manifest: Manifest;
   spoke: SpokeConfig;
   "team-profile": TeamProfile;
+  golden: GoldenQuestion;
 }
 
 export type ValidateResult<T> = { ok: true; value: T } | { ok: false; errors: string[] };
