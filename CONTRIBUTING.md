@@ -25,6 +25,6 @@ docs: expand adoption guide
 
 **Framework code carries no team's content.** `src/`, `schemas/`, and `catalog/` must contain no team, partner, or product names. `npm run check` runs `team-ai check-agnostic` (added in a later task) which enforces this.
 
-**Walk the quality bar before merging.** Every change must keep every answer in [`docs/quality-bar.md`](docs/quality-bar.md) honest. The PR template asks which of the 17 lines your change touches.
+**Walk the quality bar before merging.** Every change must keep every answer in [`docs/quality-bar.md`](docs/quality-bar.md) honest. That file has 17 anchored sections, `#q1` through `#q17`, and every interview question's `why` cites one of them. The PR template asks which of the 17 lines your change touches.
 
-**Reusable workflows track `main` via the `v0` branch until 1.0.** If you change a reusable workflow, the `v0` branch must be updated to match.
+**Reusable workflows track `main` via the `v0` branch until 1.0.** A `v0` branch tracks `main` until 1.0 — generated instances pin `@v0` — so if you change a reusable workflow in `.github/workflows/*.reusable.yml`, update `v0` to match.

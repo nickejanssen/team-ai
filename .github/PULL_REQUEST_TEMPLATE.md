@@ -8,7 +8,7 @@
 
 ## Quality-bar impact
 
-Which of the 17 lines in docs/quality-bar.md does this touch? How does it stay honest?
+Which of the 17 lines in [`docs/quality-bar.md`](../docs/quality-bar.md) (`#q1`–`#q17`) does this touch? How does it stay honest?
 
 ## Tests
 
