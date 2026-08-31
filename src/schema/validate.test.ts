@@ -143,6 +143,7 @@ describe("model_tier enum consistency", () => {
     { schema: "agent", path: ["properties", "model_tier", "enum"] },
     { schema: "manifest", path: ["$defs", "manifestDomain", "properties", "model_tier", "enum"] },
     { schema: "spoke", path: ["$defs", "spokeDomain", "properties", "model_tier", "enum"] },
+    { schema: "golden", path: ["properties", "expect_tier_max", "enum"] },
   ])("$schema uses the canonical model_tier enum", ({ schema, path }) => {
     expect(nodeAt(readSchema(schema), path)).toEqual([...MODEL_TIERS]);
   });
@@ -162,7 +163,14 @@ function nodeAt(root: Record<string, unknown>, path: string[]): unknown {
   return node;
 }
 
-const SCHEMA_NAMES: SchemaName[] = ["team-profile", "frontmatter", "agent", "manifest", "spoke"];
+const SCHEMA_NAMES: SchemaName[] = [
+  "team-profile",
+  "frontmatter",
+  "agent",
+  "manifest",
+  "spoke",
+  "golden",
+];
 
 function schemaFromFilename(file: string): SchemaName {
   const base = file.replace(/\.(json|ya?ml)$/, "");
@@ -242,6 +250,12 @@ const INVALID_CASES: { file: string; schema: SchemaName; expect: string }[] = [
     file: "team-profile-deferred-missing-revisit.json",
     schema: "team-profile",
     expect: "must have required property 'revisit'",
+  },
+  { file: "golden-bad-tier.json", schema: "golden", expect: "/expect_tier_max" },
+  {
+    file: "golden-missing-question.json",
+    schema: "golden",
+    expect: "must have required property 'question'",
   },
 ];
 

@@ -58,14 +58,25 @@ function hitNamespace(hit: Hit): string | undefined {
   return typeof namespace === "string" ? namespace : undefined;
 }
 
-// How many of a domain's keywords occur as case-insensitive substrings of the
-// question. Substring (not word) match is intentional: "429s" should match the
-// keyword "429".
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// A keyword matches only as a whole word or phrase, not as an interior
+// substring: the keyword "pto" must not fire on "cryptography". Word edges are
+// any non-alphanumeric character (or the string ends), so spaces inside a
+// multi-word keyword are matched literally and "429s"/"429." still count.
+function keywordMatches(haystack: string, keyword: string): boolean {
+  const pattern = new RegExp(`(?:^|[^a-z0-9])${escapeRegex(keyword.toLowerCase())}(?:[^a-z0-9]|$)`);
+  return pattern.test(haystack);
+}
+
+// How many of a domain's keywords occur as whole words/phrases in the question,
+// case-insensitively.
 function keywordScore(question: string, keywords: string[]): number {
   const haystack = question.toLowerCase();
-  return keywords.filter(
-    (keyword) => keyword.length > 0 && haystack.includes(keyword.toLowerCase()),
-  ).length;
+  return keywords.filter((keyword) => keyword.length > 0 && keywordMatches(haystack, keyword))
+    .length;
 }
 
 export async function routeQuestion(

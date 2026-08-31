@@ -86,6 +86,19 @@ describe("routeQuestion", () => {
     expect(result).toEqual({ route: "__refuse__", tier: "none" });
   });
 
+  it("matches keywords on word boundaries, not as interior substrings", async () => {
+    // The handbook keyword "pto" must NOT fire on "cryptography". With a correct
+    // word-boundary match, step 1 finds nothing and retrieval routes the query
+    // to platform (its top hit is the rate-limits / key-rotation material).
+    const result = await routeQuestion(
+      "how does our cryptography key rotation work",
+      manifest,
+      search,
+    );
+    expect(result).toEqual({ route: "platform-sme", tier: "small" });
+    expect(result).not.toEqual({ route: "handbook-sme", tier: "none" });
+  });
+
   it("breaks a keyword tie with the top hit's namespace (tier small)", async () => {
     // Both domains match exactly one keyword, so step 1 cannot decide; a stub
     // search returns a platform-namespace top hit and routing follows it.
