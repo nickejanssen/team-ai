@@ -58,6 +58,12 @@ export function buildProgram(): Command {
   return program;
 }
 
+export async function main(argv: string[] = process.argv): Promise<void> {
+  await buildProgram().parseAsync(argv);
+}
+
+// Run when invoked directly (`node dist/cli.js …`). The installed binary calls
+// `main()` from `bin/team-ai.js` instead.
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
-  void buildProgram().parseAsync(process.argv);
+  void main();
 }

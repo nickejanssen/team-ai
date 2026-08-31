@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { buildProgram } from "./cli.js";
+import { buildProgram, main } from "./cli.js";
 import { packageVersion } from "./version.js";
+
+describe("cli module", () => {
+  it("exports main as a function", () => {
+    expect(typeof main).toBe("function");
+  });
+});
 
 describe("buildProgram", () => {
   it("registers every command", () => {
