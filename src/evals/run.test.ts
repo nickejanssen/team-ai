@@ -9,7 +9,8 @@ import { createAdapter } from "../retrieval/factory.js";
 import type { Hit, RetrievalAdapter } from "../retrieval/types.js";
 import type { GoldenQuestion, Manifest } from "../schema/types.js";
 import { run as runEvals } from "../commands/run-evals.js";
-import { loadGates, routeQuestion, runGoldenFile } from "./run.js";
+import { DEFAULT_GATES, loadGates, routeQuestion, runGoldenFile } from "./run.js";
+import type { GateThresholds } from "./metrics.js";
 
 const FIXTURE = "src/evals/fixtures/instance";
 
@@ -99,6 +100,42 @@ describe("routeQuestion", () => {
     expect(result).not.toEqual({ route: "handbook-sme", tier: "none" });
   });
 
+  it("matches a keyword against its plural (429 -> '429s')", async () => {
+    const result = await routeQuestion(
+      "What do partners do when they start getting 429s?",
+      manifest,
+      search,
+    );
+    expect(result).toEqual({ route: "platform-sme", tier: "none" });
+  });
+
+  it("matches a keyword against its plural (webhook -> 'webhooks')", async () => {
+    const result = await routeQuestion("Our webhooks keep failing — what now?", manifest, search);
+    expect(result).toEqual({ route: "platform-sme", tier: "none" });
+  });
+
+  it("refuses when a retrieved hit's namespace maps to no manifest domain", async () => {
+    const stub = (): Promise<Hit[]> =>
+      Promise.resolve([
+        {
+          doc_id: "d",
+          chunk_id: "c",
+          path: "legal/contracts.md",
+          heading_path: "Contracts",
+          score: 0.8,
+          text: "indemnification clauses",
+          metadata: { namespace: "legal" },
+        },
+      ]);
+    const result = await routeQuestion(
+      "what are our standard indemnification terms",
+      manifest,
+      stub,
+    );
+    expect(result.route).toBe("__refuse__");
+    expect(result).toEqual({ route: "__refuse__", tier: "none" });
+  });
+
   it("breaks a keyword tie with the top hit's namespace (tier small)", async () => {
     // Both domains match exactly one keyword, so step 1 cannot decide; a stub
     // search returns a platform-namespace top hit and routing follows it.
@@ -161,6 +198,7 @@ describe("runGoldenFile", () => {
     expect(rateLimit?.routedTo).toBe("platform-sme");
     expect(rateLimit?.routeCorrect).toBe(true);
     expect(rateLimit?.citationsValid).toBe(true);
+    expect(rateLimit?.namespaceOk).toBe(true);
     expect(rateLimit?.tierOk).toBe(true);
 
     const refuse = byId.get("eval.fixture.refuse-out-of-kb");
@@ -168,6 +206,38 @@ describe("runGoldenFile", () => {
     expect(refuse?.refuseCorrect).toBe(true);
     expect(refuse?.routedTo).toBe("__refuse__");
     expect(refuse?.citationsValid).toBe(true);
+    expect(refuse?.namespaceOk).toBe(true);
+  });
+
+  it("marks citationsValid false when must_cite is true but expect_paths is empty", async () => {
+    const dir = makeInstance();
+    const question: GoldenQuestion = {
+      id: "eval.test.must-cite-no-paths",
+      question: "What should a caller do when they hit a 429 rate limit error?",
+      expect_namespace: "platform",
+      expect_paths: [],
+      expect_route: "platform-sme",
+      expect_tier_max: "small",
+      must_cite: true,
+    };
+    const [outcome] = await runGoldenFile([question], { instanceDir: dir });
+    expect(outcome?.citationsValid).toBe(false);
+  });
+
+  it("marks namespaceOk false when the routed domain's namespace differs from expect_namespace", async () => {
+    const dir = makeInstance();
+    const question: GoldenQuestion = {
+      id: "eval.test.wrong-namespace",
+      question: "What should a caller do when they hit a 429 rate limit error?",
+      expect_namespace: "handbook",
+      expect_paths: ["kb/platform/rate-limits.md"],
+      expect_route: "platform-sme",
+      expect_tier_max: "none",
+      must_cite: true,
+    };
+    const [outcome] = await runGoldenFile([question], { instanceDir: dir });
+    expect(outcome?.routedTo).toBe("platform-sme");
+    expect(outcome?.namespaceOk).toBe(false);
   });
 });
 
@@ -179,6 +249,7 @@ describe("loadGates", () => {
       citationValidity: 1.0,
       routingAccuracy: 0.8,
       refusalRate: 1.0,
+      namespaceAccuracy: 0.8,
     });
   });
 
@@ -192,6 +263,12 @@ describe("loadGates", () => {
     // unspecified keys fall back to the shipped defaults
     expect(gates.citationValidity).toBe(1);
     expect(gates.refusalRate).toBe(1);
+    expect(gates.namespaceAccuracy).toBe(0.8);
+  });
+
+  it("keeps the reference evals/gates.yaml in sync with DEFAULT_GATES", () => {
+    const reference = parseYaml(readFileSync("evals/gates.yaml", "utf8")) as GateThresholds;
+    expect(reference).toEqual(DEFAULT_GATES);
   });
 });
 
@@ -219,6 +296,14 @@ describe("run-evals command", () => {
     const printed = log.mock.calls.map((c) => String(c[0])).join("\n");
     expect(printed).toContain("skipping example.golden.yaml");
     expect(printed).toContain("no golden questions found");
+  });
+
+  it("returns 1 with a clean error when the golden directory is missing", async () => {
+    const dir = makeInstance();
+    const code = await runEvals({ root: dir, golden: "no-such-dir" });
+    expect(code).toBe(1);
+    const printed = error.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(printed).toContain("cannot read golden directory");
   });
 
   it("returns 1 when a golden file fails the schema", async () => {

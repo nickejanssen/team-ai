@@ -7,6 +7,7 @@ const DEFAULT_GATES: GateThresholds = {
   citationValidity: 1.0,
   routingAccuracy: 0.8,
   refusalRate: 1.0,
+  namespaceAccuracy: 0.8,
 };
 
 function outcome(overrides: Partial<EvalOutcome> = {}): EvalOutcome {
@@ -17,6 +18,7 @@ function outcome(overrides: Partial<EvalOutcome> = {}): EvalOutcome {
     citationsValid: true,
     routedTo: "domain-sme",
     routeCorrect: true,
+    namespaceOk: true,
     tier: "small",
     tierOk: true,
     refuseExpected: false,
@@ -95,6 +97,19 @@ describe("computeReport metrics", () => {
     );
     expect(report.metrics.tierCeiling).toBeCloseTo(2 / 3, 10);
   });
+
+  it("namespaceAccuracy is the fraction of outcomes with namespaceOk", () => {
+    const report = computeReport(
+      [
+        outcome({ namespaceOk: true }),
+        outcome({ namespaceOk: false }),
+        outcome({ refuseExpected: true, refuseCorrect: true, namespaceOk: true }),
+        outcome({ namespaceOk: true }),
+      ],
+      DEFAULT_GATES,
+    );
+    expect(report.metrics.namespaceAccuracy).toBe(0.75);
+  });
 });
 
 describe("computeReport gates", () => {
@@ -122,7 +137,18 @@ describe("computeReport gates", () => {
     expect(report.gates.citationValidity?.pass).toBe(true);
     expect(report.gates.routingAccuracy?.pass).toBe(true);
     expect(report.gates.refusalRate?.pass).toBe(true);
+    expect(report.gates.namespaceAccuracy?.pass).toBe(true);
     expect(report.metrics.tierCeiling).toBe(0);
+    expect(report.pass).toBe(false);
+  });
+
+  it("fails the report when the namespaceAccuracy gate misses", () => {
+    const report = computeReport(
+      [outcome({ namespaceOk: false }), outcome({ namespaceOk: false }), outcome()],
+      DEFAULT_GATES,
+    );
+    expect(report.metrics.namespaceAccuracy).toBeCloseTo(1 / 3, 10);
+    expect(report.gates.namespaceAccuracy?.pass).toBe(false);
     expect(report.pass).toBe(false);
   });
 
@@ -141,11 +167,12 @@ describe("computeReport gates", () => {
     expect(report.gates.hitRate?.pass).toBe(true);
   });
 
-  it("only the four soft metrics get gate entries", () => {
+  it("only the five soft metrics get gate entries (tierCeiling is not a soft gate)", () => {
     const report = computeReport([outcome()], DEFAULT_GATES);
     expect(Object.keys(report.gates).sort()).toEqual([
       "citationValidity",
       "hitRate",
+      "namespaceAccuracy",
       "refusalRate",
       "routingAccuracy",
     ]);

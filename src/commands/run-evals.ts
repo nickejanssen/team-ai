@@ -9,7 +9,7 @@
 // a fresh instance ships the example but no real golden set, and that is not an
 // error. See docs/architecture.md §16.
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { parse as parseYaml } from "yaml";
@@ -35,21 +35,38 @@ function firstLine(text: string): string {
   return text.split(/\r?\n/, 1)[0] ?? "";
 }
 
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 interface CollectResult {
   questions: GoldenQuestion[];
   skipped: string[];
   error?: string;
 }
 
+function listGoldenFiles(dir: string): { files: string[] } | { error: string } {
+  try {
+    const files = readdirSync(dir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(GOLDEN_SUFFIX))
+      .map((entry) => entry.name)
+      .sort();
+    return { files };
+  } catch (err) {
+    return { error: `cannot read golden directory ${toPosix(dir)} — ${errMessage(err)}` };
+  }
+}
+
 function collectQuestions(dir: string): CollectResult {
-  const files = readdirSync(dir)
-    .filter((name) => name.endsWith(GOLDEN_SUFFIX))
-    .sort();
+  const listed = listGoldenFiles(dir);
+  if ("error" in listed) {
+    return { questions: [], skipped: [], error: listed.error };
+  }
 
   const questions: GoldenQuestion[] = [];
   const skipped: string[] = [];
 
-  for (const file of files) {
+  for (const file of listed.files) {
     const raw = readFileSync(join(dir, file), "utf8");
     if (firstLine(raw).toUpperCase().includes("EXAMPLE")) {
       skipped.push(file);
@@ -81,10 +98,6 @@ function collectQuestions(dir: string): CollectResult {
   return { questions, skipped };
 }
 
-function errMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
 function pct(value: number): string {
   return `${(value * 100).toFixed(1)}%`.padStart(7);
 }
@@ -94,6 +107,7 @@ function questionProblems(outcome: EvalOutcome): string[] {
   if (!outcome.refuseExpected && !outcome.hit) problems.push("expected path not in top 8");
   if (!outcome.citationsValid) problems.push("a cited path did not resolve");
   if (!outcome.routeCorrect) problems.push(`routed to '${outcome.routedTo}'`);
+  if (!outcome.namespaceOk) problems.push("routed namespace != expect_namespace");
   if (!outcome.tierOk) problems.push(`tier '${outcome.tier}' exceeds ceiling`);
   if (outcome.refuseExpected && !outcome.refuseCorrect) problems.push("did not refuse");
   return problems;
@@ -117,6 +131,7 @@ function printReport(report: EvalReport): void {
     gateRow("citationValidity", metrics.citationValidity),
     gateRow("routingAccuracy", metrics.routingAccuracy),
     gateRow("refusalRate", metrics.refusalRate),
+    gateRow("namespaceAccuracy", metrics.namespaceAccuracy),
     {
       name: "tierCeiling",
       value: metrics.tierCeiling,
@@ -127,10 +142,10 @@ function printReport(report: EvalReport): void {
 
   console.log(`golden questions: ${metrics.count}`);
   console.log("");
-  console.log("metric            value   threshold  result");
+  console.log("metric             value   threshold  result");
   for (const entry of rows) {
     console.log(
-      `${entry.name.padEnd(17)} ${pct(entry.value)}  ${pct(entry.threshold)}    ` +
+      `${entry.name.padEnd(18)} ${pct(entry.value)}  ${pct(entry.threshold)}    ` +
         (entry.pass ? "PASS" : "FAIL"),
     );
   }
@@ -156,12 +171,6 @@ export async function run(opts: RunEvalsCommandOptions): Promise<number> {
   const goldenDir = opts.golden ?? "evals/golden";
   const dir = join(root, goldenDir);
   const shown = toPosix(dir);
-  const empty = `no golden questions found (add <namespace>.golden.yaml files under ${shown})`;
-
-  if (!existsSync(dir)) {
-    console.log(empty);
-    return 0;
-  }
 
   const { questions, skipped, error } = collectQuestions(dir);
   for (const file of skipped) {
@@ -172,7 +181,7 @@ export async function run(opts: RunEvalsCommandOptions): Promise<number> {
     return 1;
   }
   if (questions.length === 0) {
-    console.log(empty);
+    console.log(`no golden questions found (add <namespace>.golden.yaml files under ${shown})`);
     return 0;
   }
 

@@ -5,12 +5,15 @@
 // question through the architecture's routing procedure, and produces the
 // per-question `EvalOutcome`s that `metrics.computeReport` aggregates.
 //
-// `routeQuestion` mirrors docs/architecture.md §16 exactly:
+// `routeQuestion` mirrors docs/architecture.md §16:
 //   1. Zero-model exact keyword route when one domain uniquely owns the query.
-//   2. Search-assisted route (tier "small") on a keyword tie or miss.
-//   3. Refuse when retrieval returns nothing above the 0.2 score threshold.
+//   2. Search-assisted route (tier "small") on a keyword tie or miss, resolved
+//      by the top hit's namespace.
+//   3. Refuse when retrieval returns nothing above the 0.2 score threshold, or
+//      when nothing retrieved maps to a manifest domain. A confident wrong
+//      route is worse than no answer.
 
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { parse as parseYaml } from "yaml";
@@ -28,11 +31,15 @@ const TOP_K = 8;
 const REFUSE_ROUTE = "__refuse__";
 const REFUSE_THRESHOLD = 0.2;
 
-const DEFAULT_GATES: GateThresholds = {
+// The single source of truth for the built-in gate thresholds. `evals/gates.yaml`
+// at the repo root is a human-readable reference copy of these values, not a
+// file this module loads.
+export const DEFAULT_GATES: GateThresholds = {
   hitRate: 0.8,
   citationValidity: 1.0,
   routingAccuracy: 0.8,
   refusalRate: 1.0,
+  namespaceAccuracy: 0.8,
 };
 
 const TIER_RANK: Record<ModelTier, number> = { none: 0, small: 1, large: 2 };
@@ -62,12 +69,15 @@ function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// A keyword matches only as a whole word or phrase, not as an interior
+// A keyword matches only as a whole word or phrase, never as an interior
 // substring: the keyword "pto" must not fire on "cryptography". Word edges are
-// any non-alphanumeric character (or the string ends), so spaces inside a
-// multi-word keyword are matched literally and "429s"/"429." still count.
+// any non-alphanumeric character (or the string boundary), and a trailing plural
+// or possessive is allowed so "429" still matches "429s" and "webhook" matches
+// "webhooks". Spaces inside a multi-word keyword are matched literally.
 function keywordMatches(haystack: string, keyword: string): boolean {
-  const pattern = new RegExp(`(?:^|[^a-z0-9])${escapeRegex(keyword.toLowerCase())}(?:[^a-z0-9]|$)`);
+  const pattern = new RegExp(
+    `(?:^|[^a-z0-9])${escapeRegex(keyword.toLowerCase())}(?:'s|s)?(?:[^a-z0-9]|$)`,
+  );
   return pattern.test(haystack);
 }
 
@@ -100,31 +110,31 @@ export async function routeQuestion(
     }
   }
 
-  // Step 2: keyword tie or miss — let retrieval break the tie.
+  // Step 2: keyword tie or miss — let retrieval decide.
   const hits = await search(question);
   const top = hits[0];
   if (top !== undefined && top.score >= REFUSE_THRESHOLD) {
     const topNamespace = hitNamespace(top);
-    if (topNamespace !== undefined) {
-      const matches = domains.filter((domain) => domain.kb_namespace === topNamespace);
-      const only = matches.length === 1 ? matches[0] : undefined;
-      if (only !== undefined) {
-        return { route: only.subagent, tier: "small" };
-      }
+    const topMatches =
+      topNamespace === undefined
+        ? []
+        : domains.filter((domain) => domain.kb_namespace === topNamespace);
+    // Exactly one mapped domain, or a namespace shared by several domains
+    // (ambiguous but real) resolved by manifest array order.
+    const firstMatch = topMatches[0];
+    if (firstMatch !== undefined) {
+      return { route: firstMatch.subagent, tier: "small" };
     }
-    // Namespace tie, or the top hit's namespace maps to no domain: walk the hits
-    // in score order and route to the first whose namespace maps to a domain.
+    // The top hit's namespace maps to no domain: try the best-scoring hit whose
+    // namespace does map. If nothing retrieved maps to a domain, refuse rather
+    // than route confidently to the wrong place.
     const mapped = bestMappedDomain(hits, domains);
     if (mapped !== undefined) {
       return { route: mapped.subagent, tier: "small" };
     }
-    const fallback = domains[0];
-    if (fallback !== undefined) {
-      return { route: fallback.subagent, tier: "small" };
-    }
   }
 
-  // Step 3: nothing retrievable above threshold.
+  // Step 3: nothing retrievable above threshold, or nothing that maps to a domain.
   return { route: REFUSE_ROUTE, tier: "none" };
 }
 
@@ -158,8 +168,17 @@ function readManifest(instanceDir: string): Manifest {
   return result.value;
 }
 
-function citationsResolve(docs: KbDoc[], expectPaths: string[]): boolean {
-  return expectPaths.every((path) => resolveCitation(docs, path).ok);
+// `must_cite: true` demands a non-empty `expect_paths` that fully resolves.
+// `must_cite: false` still requires any listed path to resolve, but an empty
+// list is fine (a refusal cites nothing).
+function citationsResolve(docs: KbDoc[], question: GoldenQuestion): boolean {
+  const paths = question.expect_paths;
+  if (question.must_cite && paths.length === 0) return false;
+  return paths.every((path) => resolveCitation(docs, path).ok);
+}
+
+function namespaceForRoute(manifest: Manifest, route: string): string | undefined {
+  return manifest.domains.find((domain) => domain.subagent === route)?.kb_namespace;
 }
 
 export async function runGoldenFile(
@@ -180,14 +199,18 @@ export async function runGoldenFile(
       const routing = await routeQuestion(question.question, manifest, search);
       const refuseExpected = question.expect_route === REFUSE_ROUTE;
       const routedTo = routing.route;
+      const routedNamespace = namespaceForRoute(manifest, routedTo);
 
       outcomes.push({
         id: question.id,
         question: question.question,
         hit: expectedPathHit(question.expect_paths, hits),
-        citationsValid: citationsResolve(docs, question.expect_paths),
+        citationsValid: citationsResolve(docs, question),
         routedTo,
         routeCorrect: routedTo === question.expect_route,
+        namespaceOk: refuseExpected
+          ? question.expect_namespace === ""
+          : routedNamespace !== undefined && routedNamespace === question.expect_namespace,
         tier: routing.tier,
         tierOk: TIER_RANK[routing.tier] <= TIER_RANK[question.expect_tier_max],
         refuseExpected,
@@ -200,14 +223,20 @@ export async function runGoldenFile(
   }
 }
 
+// The built-in `DEFAULT_GATES` are the base; an optional
+// `<instance>/evals/gates.yaml` overrides individual keys.
 export function loadGates(instanceDir: string): GateThresholds {
   const path = join(instanceDir, "evals", "gates.yaml");
-  if (!existsSync(path)) return { ...DEFAULT_GATES };
+  let record: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = parseYaml(readFileSync(path, "utf8"));
+    if (typeof parsed === "object" && parsed !== null) {
+      record = parsed as Record<string, unknown>;
+    }
+  } catch {
+    // No instance override file (or an unreadable one): fall back to defaults.
+  }
 
-  const parsed: unknown = parseYaml(readFileSync(path, "utf8"));
-  if (typeof parsed !== "object" || parsed === null) return { ...DEFAULT_GATES };
-
-  const record = parsed as Record<string, unknown>;
   const pick = (key: keyof GateThresholds): number => {
     const value = record[key];
     return typeof value === "number" && Number.isFinite(value) ? value : DEFAULT_GATES[key];
@@ -218,5 +247,6 @@ export function loadGates(instanceDir: string): GateThresholds {
     citationValidity: pick("citationValidity"),
     routingAccuracy: pick("routingAccuracy"),
     refusalRate: pick("refusalRate"),
+    namespaceAccuracy: pick("namespaceAccuracy"),
   };
 }

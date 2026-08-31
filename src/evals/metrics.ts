@@ -14,6 +14,7 @@ export interface EvalOutcome {
   citationsValid: boolean;
   routedTo: string;
   routeCorrect: boolean;
+  namespaceOk: boolean;
   tier: EvalTier;
   tierOk: boolean;
   refuseExpected: boolean;
@@ -25,6 +26,7 @@ export interface GateThresholds {
   citationValidity: number;
   routingAccuracy: number;
   refusalRate: number;
+  namespaceAccuracy: number;
 }
 
 export interface GateResult {
@@ -38,6 +40,7 @@ export interface EvalMetrics {
   citationValidity: number;
   routingAccuracy: number;
   refusalRate: number;
+  namespaceAccuracy: number;
   tierCeiling: number;
   count: number;
 }
@@ -70,6 +73,7 @@ export function computeReport(outcomes: EvalOutcome[], gates: GateThresholds): E
     citationValidity: fraction(outcomes.filter((outcome) => outcome.citationsValid).length, count),
     routingAccuracy: fraction(outcomes.filter((outcome) => outcome.routeCorrect).length, count),
     refusalRate: fraction(refuse.filter((outcome) => outcome.refuseCorrect).length, refuse.length),
+    namespaceAccuracy: fraction(outcomes.filter((outcome) => outcome.namespaceOk).length, count),
     tierCeiling: fraction(outcomes.filter((outcome) => outcome.tierOk).length, count),
     count,
   };
@@ -79,6 +83,7 @@ export function computeReport(outcomes: EvalOutcome[], gates: GateThresholds): E
     citationValidity: gate(metrics.citationValidity, gates.citationValidity),
     routingAccuracy: gate(metrics.routingAccuracy, gates.routingAccuracy),
     refusalRate: gate(metrics.refusalRate, gates.refusalRate),
+    namespaceAccuracy: gate(metrics.namespaceAccuracy, gates.namespaceAccuracy),
   };
 
   const gatesPass = Object.values(gateResults).every((result) => result.pass);
