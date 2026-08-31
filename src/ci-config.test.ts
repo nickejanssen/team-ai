@@ -16,3 +16,53 @@ describe("ci.yml", () => {
     expect(doc.permissions?.contents).toBe("read");
   });
 });
+
+interface ReusableWorkflow {
+  on?: { workflow_call?: { inputs?: Record<string, { default?: unknown; type?: string }> } };
+  permissions?: Record<string, string>;
+  jobs?: Record<string, unknown>;
+}
+
+const REUSABLE = ["validate-kb", "validate-spoke", "evals"] as const;
+const DOCUMENTED_INPUTS: Record<string, string> = {
+  "node-version": "22",
+  root: ".",
+  "team-ai-version": "latest",
+};
+
+describe.each(REUSABLE)("%s.reusable.yml", (name) => {
+  const doc = parse(
+    readFileSync(`.github/workflows/${name}.reusable.yml`, "utf8"),
+  ) as ReusableWorkflow;
+
+  it("is triggered by workflow_call", () => {
+    expect(doc.on?.workflow_call).toBeDefined();
+  });
+
+  it("declares the three documented inputs with their defaults", () => {
+    const inputs = doc.on?.workflow_call?.inputs ?? {};
+    expect(Object.keys(inputs).sort()).toEqual(Object.keys(DOCUMENTED_INPUTS).sort());
+    for (const [key, expected] of Object.entries(DOCUMENTED_INPUTS)) {
+      expect(inputs[key]?.default, `${name} input ${key} default`).toBe(expected);
+      expect(inputs[key]?.type, `${name} input ${key} type`).toBe("string");
+    }
+  });
+
+  it("is read-only", () => {
+    expect(doc.permissions?.contents).toBe("read");
+  });
+
+  it("defines at least one job", () => {
+    expect(Object.keys(doc.jobs ?? {}).length).toBeGreaterThan(0);
+  });
+});
+
+describe("evals.reusable.yml", () => {
+  const raw = readFileSync(".github/workflows/evals.reusable.yml", "utf8");
+  it("uploads the eval report as an artifact even on failure", () => {
+    expect(raw).toContain("actions/upload-artifact@v4");
+    expect(raw).toContain("if: always()");
+    expect(raw).toContain("run-evals");
+    expect(raw).toContain("--json");
+  });
+});

@@ -1,0 +1,27 @@
+name: validate-spoke (reusable)
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version to run under
+        type: string
+        default: "22"
+      root:
+        description: Spoke root directory to validate
+        type: string
+        default: "."
+      team-ai-version:
+        description: team-ai version to run via npx
+        type: string
+        default: "latest"
+permissions:
+  contents: read
+jobs:
+  validate-spoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+      - run: npx team-ai@${{ inputs.team-ai-version }} validate-spoke --root ${{ inputs.root }}
