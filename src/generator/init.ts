@@ -10,14 +10,12 @@
 // `writeOutputs` writes the profile + gate docs, then the generated-file
 // manifest is merged, then reindex / assemble-manifest / doctor run as reports.
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { appendFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { select } from "@inquirer/prompts";
 
-import type { RoleArchetype } from "../catalog/types.js";
-import { generateStub } from "../catalog/stub.js";
 import * as assembleManifest from "../commands/assemble-manifest.js";
 import * as doctor from "../commands/doctor.js";
 import * as reindex from "../commands/reindex.js";
@@ -28,19 +26,20 @@ import { scanPreflight } from "../interview/preflight.js";
 import { renderPreflight } from "../interview/preflight-report.js";
 import { writeOutputs } from "../interview/outputs.js";
 import { buildContext } from "./context.js";
+import { computeExclude, renderEntityFiles, TEMPLATES_INSTANCE } from "./entity-files.js";
 import {
   mergeGeneratedManifest,
   readGeneratedManifest,
-  sha256Of,
   type GeneratedEntry,
 } from "./generated-manifest.js";
+import * as resume from "./resume.js";
 import {
   parseStrategy,
   planReconcile,
   RECONCILE_STRATEGIES,
   type ReconcilePlan,
 } from "./reconcile.js";
-import { renderTemplate, renderTree, type RenderResult } from "./render.js";
+import { renderTree, type RenderResult } from "./render.js";
 
 type Strategy = ReconcilePlan["strategy"];
 
@@ -54,7 +53,6 @@ export interface InitOptions {
   output?: (s: string) => void;
 }
 
-const TEMPLATES_INSTANCE = fileURLToPath(new URL("../../templates/instance", import.meta.url));
 const TEMPLATES_MCP = fileURLToPath(new URL("../../templates/mcp-server", import.meta.url));
 
 const STAND_DOWN_NOTE = [
@@ -68,167 +66,6 @@ const STAND_DOWN_NOTE = [
 
 function str(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.length > 0 ? value : fallback;
-}
-
-function asDomains(value: unknown): { slug: string; name: string }[] {
-  if (!Array.isArray(value)) return [];
-  const out: { slug: string; name: string }[] = [];
-  for (const item of value) {
-    if (item !== null && typeof item === "object") {
-      const rec = item as Record<string, unknown>;
-      if (typeof rec.slug === "string" && typeof rec.name === "string") {
-        out.push({ slug: rec.slug, name: rec.name });
-      }
-    }
-  }
-  return out;
-}
-
-function asRoles(value: unknown): RoleArchetype[] {
-  return Array.isArray(value) ? (value as RoleArchetype[]) : [];
-}
-
-function asStrings(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
-}
-
-function readTemplate(rel: string): string {
-  return readFileSync(join(TEMPLATES_INSTANCE, rel), "utf8");
-}
-
-/**
- * Classify one generated file against what is on disk and the prior manifest,
- * then write it unless doing so would clobber human work. Mirrors `renderTree`'s
- * non-destructive semantics for the per-entity files it does not itself emit.
- */
-function writeIfSafe(
-  outRel: string,
-  content: string,
-  renderDir: string,
-  priorByPath: Map<string, string>,
-  onCollision: "siblings" | "skip",
-  result: RenderResult,
-): void {
-  const outAbs = join(renderDir, outRel);
-
-  if (!existsSync(outAbs)) {
-    result.created.push(outRel);
-    result.manifestEntries.push({ path: outRel, sha256: sha256Of(content) });
-    mkdirSync(dirname(outAbs), { recursive: true });
-    writeFileSync(outAbs, content, "utf8");
-    return;
-  }
-
-  const current = readFileSync(outAbs, "utf8");
-  if (current === content) {
-    result.unchanged.push(outRel);
-    return;
-  }
-
-  const prior = priorByPath.get(outRel);
-  if (prior !== undefined && prior === sha256Of(current)) {
-    result.updated.push(outRel);
-    result.manifestEntries.push({ path: outRel, sha256: sha256Of(content) });
-    writeFileSync(outAbs, content, "utf8");
-    return;
-  }
-
-  result.collisions.push(outRel);
-  if (onCollision === "siblings") {
-    const siblingRel = `${outRel}.team-ai-new`;
-    result.siblingsWritten.push(siblingRel);
-    mkdirSync(dirname(outAbs), { recursive: true });
-    writeFileSync(`${outAbs}.team-ai-new`, content, "utf8");
-  }
-}
-
-function renderEntityFiles(
-  context: Record<string, unknown>,
-  renderDir: string,
-  priorByPath: Map<string, string>,
-  onCollision: "siblings" | "skip",
-  result: RenderResult,
-): void {
-  const namespaces = asStrings(context.namespaces);
-  const firstNamespace = namespaces[0] ?? "operating";
-
-  const domainYaml = readTemplate("agents/_domain-sme.yaml.hbs");
-  const domainMd = readTemplate("agents/_domain-sme.md.hbs");
-  for (const domain of asDomains(context.domains)) {
-    const ctx = {
-      ...context,
-      slug: domain.slug,
-      name: domain.name,
-      namespace: firstNamespace,
-      escalate_to: "unassigned",
-    };
-    const yaml = renderTemplate(domainYaml, ctx, `agents/${domain.slug}-sme.yaml`);
-    const md = renderTemplate(domainMd, ctx, `agents/${domain.slug}-sme.md`);
-    result.warnings.push(...yaml.warnings, ...md.warnings);
-    writeIfSafe(
-      `agents/${domain.slug}-sme.yaml`,
-      yaml.output,
-      renderDir,
-      priorByPath,
-      onCollision,
-      result,
-    );
-    writeIfSafe(
-      `agents/${domain.slug}-sme.md`,
-      md.output,
-      renderDir,
-      priorByPath,
-      onCollision,
-      result,
-    );
-  }
-
-  const roleYaml = readTemplate("agents/roles/_role.yaml.hbs");
-  const roleMd = readTemplate("agents/roles/_role.md.hbs");
-  for (const role of asRoles(context.roles)) {
-    const ctx = { ...context, ...role };
-    const yaml = renderTemplate(roleYaml, ctx, `agents/roles/${role.name}.yaml`);
-    const md = renderTemplate(roleMd, ctx, `agents/roles/${role.name}.md`);
-    result.warnings.push(...yaml.warnings, ...md.warnings);
-    writeIfSafe(
-      `agents/roles/${role.name}.yaml`,
-      yaml.output,
-      renderDir,
-      priorByPath,
-      onCollision,
-      result,
-    );
-    writeIfSafe(
-      `agents/roles/${role.name}.md`,
-      md.output,
-      renderDir,
-      priorByPath,
-      onCollision,
-      result,
-    );
-  }
-
-  for (const persona of asStrings(context.personas)) {
-    const templateRel = `personas/${persona}.md.hbs`;
-    let content: string;
-    if (existsSync(join(TEMPLATES_INSTANCE, templateRel))) {
-      const rendered = renderTemplate(readTemplate(templateRel), context, `personas/${persona}.md`);
-      result.warnings.push(...rendered.warnings);
-      content = rendered.output;
-    } else {
-      content = generateStub(persona, "persona");
-    }
-    writeIfSafe(`personas/${persona}.md`, content, renderDir, priorByPath, onCollision, result);
-  }
-}
-
-function computeExclude(seed: boolean, standDown: boolean): string[] {
-  // `renderTree` matches these against the template-relative path (the `.hbs` is
-  // still attached); a trailing `/` matches a subtree, otherwise it is exact.
-  const exclude = ["mcp-server/"];
-  if (!seed || standDown) exclude.push("kb/");
-  if (standDown) exclude.push("index.lock.hbs", ".mcp.json.hbs", "evals/");
-  return exclude;
 }
 
 function summary(result: RenderResult, output: (s: string) => void): void {
@@ -269,6 +106,17 @@ async function chooseStrategy(
 export async function run(opts: InitOptions): Promise<number> {
   const output = opts.output ?? ((s: string): void => console.log(s));
   const dir = opts.dir ?? ".";
+
+  if (opts.resume === true) {
+    if (existsSync(join(dir, "team-profile.yaml"))) {
+      const resumeOpts: Parameters<typeof resume.run>[0] = { dir };
+      if (opts.answers !== undefined) resumeOpts.answers = opts.answers;
+      if (opts.output !== undefined) resumeOpts.output = opts.output;
+      return resume.run(resumeOpts);
+    }
+    output("no team-profile.yaml to resume; run 'team-ai init'");
+    return 1;
+  }
 
   const report = await scanPreflight(opts.preflightTarget ?? dir);
   output(renderPreflight(report));

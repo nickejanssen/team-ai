@@ -8,7 +8,10 @@ import * as doctor from "./commands/doctor.js";
 import * as freshnessAudit from "./commands/freshness-audit.js";
 import * as attach from "./generator/attach.js";
 import * as init from "./generator/init.js";
+import * as resume from "./generator/resume.js";
+import * as review from "./generator/review.js";
 import * as spoke from "./generator/spoke.js";
+import * as upgrade from "./generator/upgrade.js";
 import * as reindex from "./commands/reindex.js";
 import * as runEvals from "./commands/run-evals.js";
 import * as search from "./commands/search.js";
@@ -195,6 +198,34 @@ export function buildProgram(): Command {
         .option("--force", "overwrite an existing .team-ai.yaml pre-check", false);
     },
     run: attach.run,
+  });
+
+  registerCommand(program, {
+    name: "resume",
+    description: "Re-open a saved interview and ask only the newly relevant questions",
+    configure: (command) => {
+      command.option("--dir <dir>", "instance directory containing team-profile.yaml", ".");
+    },
+    run: resume.run,
+  });
+
+  registerCommand(program, {
+    name: "review",
+    description: "Replay the three interview gate summaries from team-profile.yaml (read-only)",
+    configure: (command) => {
+      command.option("--dir <dir>", "instance directory containing team-profile.yaml", ".");
+    },
+    run: review.run,
+  });
+
+  registerCommand(program, {
+    name: "upgrade",
+    description:
+      "Refresh the framework plumbing (CI, eval gates, SETUP, index.lock chunk) in place",
+    configure: (command) => {
+      command.option("--dir <dir>", "instance directory containing team-profile.yaml", ".");
+    },
+    run: upgrade.run,
   });
 
   // `search` takes a positional argument, which the shared helper does not
