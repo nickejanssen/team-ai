@@ -170,6 +170,9 @@ const SCHEMA_NAMES: SchemaName[] = [
   "manifest",
   "spoke",
   "golden",
+  "namespace-preset",
+  "role",
+  "skill-catalog",
 ];
 
 function schemaFromFilename(file: string): SchemaName {
@@ -256,6 +259,28 @@ const INVALID_CASES: { file: string; schema: SchemaName; expect: string }[] = [
     file: "golden-missing-question.json",
     schema: "golden",
     expect: "must have required property 'question'",
+  },
+  {
+    file: "namespace-preset-missing-name.json",
+    schema: "namespace-preset",
+    expect: "must have required property 'name'",
+  },
+  {
+    file: "namespace-preset-four-seed-docs.json",
+    schema: "namespace-preset",
+    expect: "/seed_docs",
+  },
+  { file: "role-bad-tier.json", schema: "role", expect: "/model_tier" },
+  {
+    file: "role-missing-summary.json",
+    schema: "role",
+    expect: "must have required property 'summary'",
+  },
+  { file: "skill-catalog-bad-presets.json", schema: "skill-catalog", expect: "/presets" },
+  {
+    file: "skill-catalog-missing-tier.json",
+    schema: "skill-catalog",
+    expect: "must have required property 'tier'",
   },
 ];
 
