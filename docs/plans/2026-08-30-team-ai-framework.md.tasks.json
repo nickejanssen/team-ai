@@ -1,7 +1,7 @@
 {
   "planPath": "docs/plans/2026-08-30-team-ai-framework.md",
   "note": "Native Task tools were unavailable in the authoring session; this file is the manual persistence fallback. Full Goal/Files/Acceptance/Verify/Steps for each task live in the plan .md under the matching heading. Execute with /superpowers-extended-cc:executing-plans docs/plans/2026-08-30-team-ai-framework.md",
-  "lastUpdated": "2026-08-31T21:27:10.845Z",
+  "lastUpdated": "2026-08-31T21:54:45.135Z",
   "tasks": [
     {
       "id": 0,
@@ -321,7 +321,7 @@
     {
       "id": 33,
       "subject": "Task 33: spoke and attach commands",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         30,
         26
@@ -331,7 +331,7 @@
     {
       "id": 34,
       "subject": "Task 34: resume, review, upgrade",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         32
       ],
@@ -340,7 +340,7 @@
     {
       "id": 35,
       "subject": "Task 35: Emitters + emit command",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         28,
         29,
