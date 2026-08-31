@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { validate } from "../schema/validate.js";
 import { parseFrontmatter } from "./frontmatter.js";
+import { extractHeadings } from "./headings.js";
 import type { KbDoc } from "./types.js";
 
 export class KbValidationError extends Error {
@@ -15,32 +16,12 @@ export class KbValidationError extends Error {
   }
 }
 
-const HEADING = /^(#{1,6})\s+(.+)$/;
-const FENCE = /^(```|~~~)/;
-
 function toPosix(relPath: string): string {
   return relPath.split(/[\\/]/).join("/");
 }
 
 function byPath(a: string, b: string): number {
   return a.localeCompare(b);
-}
-
-// Extract ATX headings in document order, ignoring heading-looking lines inside
-// fenced code blocks. The chunker reuses this behaviour.
-function extractHeadings(body: string): string[] {
-  const headings: string[] = [];
-  let inFence = false;
-  for (const line of body.split("\n")) {
-    if (FENCE.test(line)) {
-      inFence = !inFence;
-      continue;
-    }
-    if (inFence) continue;
-    const match = HEADING.exec(line);
-    if (match?.[2]) headings.push(match[2].trim());
-  }
-  return headings;
 }
 
 async function listMarkdown(root: string): Promise<string[]> {
