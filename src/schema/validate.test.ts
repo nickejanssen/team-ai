@@ -1,0 +1,187 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+import { describe, expect, it } from "vitest";
+
+import { type SchemaName } from "./load.js";
+import { validate } from "./validate.js";
+
+describe("frontmatter schema", () => {
+  it("accepts a minimal valid doc", () => {
+    const r = validate("frontmatter", {
+      id: "x.platform.rate-limits",
+      namespace: "platform",
+      title: "Rate limits",
+      owner: "solutions-architect",
+      status: "active",
+      review_by: "2026-12-01",
+      sensitivity: "internal",
+      source: "authored",
+      tags: ["429"],
+      supersedes: [],
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("rejects an unknown status with a path-anchored message", () => {
+    const r = validate("frontmatter", {
+      id: "x.a.b",
+      namespace: "a",
+      title: "t",
+      owner: "o",
+      status: "archived",
+      review_by: "2026-12-01",
+      sensitivity: "internal",
+      source: "authored",
+      tags: [],
+      supersedes: [],
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]).toContain("/status");
+  });
+
+  it("accepts a relations block", () => {
+    const r = validate("frontmatter", {
+      id: "x.a.b",
+      namespace: "a",
+      title: "t",
+      owner: "o",
+      status: "active",
+      review_by: "2026-12-01",
+      sensitivity: "internal",
+      source: "authored",
+      tags: [],
+      supersedes: [],
+      relations: {
+        depends_on: ["x.a.auth"],
+        used_by_partner: ["acme"],
+        owned_by_role: "architect",
+      },
+    });
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("agent schema", () => {
+  it("enforces model_tier enum and max_hops >= 0", () => {
+    const bad = validate("agent", {
+      name: "p",
+      kind: "subagent",
+      description: "d",
+      model_tier: "medium",
+      kb_namespaces: [],
+      tools: [],
+      max_hops: -1,
+      instructions_file: "a.md",
+    });
+    expect(bad.ok).toBe(false);
+  });
+
+  it("accepts a valid subagent", () => {
+    const ok = validate("agent", {
+      name: "platform-sme",
+      kind: "subagent",
+      description: "d",
+      model_tier: "small",
+      kb_namespaces: ["platform"],
+      tools: ["kb_search"],
+      max_hops: 0,
+      instructions_file: "agents/platform-sme.md",
+    });
+    expect(ok.ok).toBe(true);
+  });
+});
+
+const SCHEMA_NAMES: SchemaName[] = ["team-profile", "frontmatter", "agent", "manifest", "spoke"];
+
+function schemaFromFilename(file: string): SchemaName {
+  const base = file.replace(/\.(json|ya?ml)$/, "");
+  const match = SCHEMA_NAMES.find((n) => base === n || base.startsWith(`${n}-`));
+  if (!match) throw new Error(`cannot infer schema from fixture name: ${file}`);
+  return match;
+}
+
+function readFixture(dir: "valid" | "invalid", file: string): unknown {
+  const path = fileURLToPath(new URL(`./fixtures/${dir}/${file}`, import.meta.url));
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function listFixtures(dir: "valid" | "invalid"): string[] {
+  const path = fileURLToPath(new URL(`./fixtures/${dir}/`, import.meta.url));
+  return readdirSync(path).filter((f) => /\.(json|ya?ml)$/.test(f));
+}
+
+describe("valid fixtures", () => {
+  const files = listFixtures("valid");
+
+  it("covers every schema at least twice", () => {
+    for (const name of SCHEMA_NAMES) {
+      const count = files.filter((f) => schemaFromFilename(f) === name).length;
+      expect(count, `valid fixtures for ${name}`).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it.each(files)("%s passes its schema", (file) => {
+    const r = validate(schemaFromFilename(file), readFixture("valid", file));
+    expect(r.ok, r.ok ? "" : JSON.stringify(r.errors)).toBe(true);
+  });
+});
+
+const INVALID_CASES: { file: string; schema: SchemaName; expect: string }[] = [
+  { file: "frontmatter-bad-status.json", schema: "frontmatter", expect: "/status" },
+  {
+    file: "frontmatter-missing-owner.json",
+    schema: "frontmatter",
+    expect: "must have required property 'owner'",
+  },
+  { file: "agent-bad-tier.json", schema: "agent", expect: "/model_tier" },
+  { file: "agent-negative-hops.json", schema: "agent", expect: "/max_hops" },
+  {
+    file: "manifest-domain-missing-owner.json",
+    schema: "manifest",
+    expect: "must have required property 'owner'",
+  },
+  {
+    file: "manifest-domain-extra-key.json",
+    schema: "manifest",
+    expect: "must NOT have additional properties",
+  },
+  {
+    file: "spoke-missing-toolkit-version.json",
+    schema: "spoke",
+    expect: "must have required property 'toolkit_version'",
+  },
+  { file: "spoke-domain-bad-tier.json", schema: "spoke", expect: "/domains/0/model_tier" },
+  {
+    file: "team-profile-missing-created.json",
+    schema: "team-profile",
+    expect: "must have required property 'created'",
+  },
+  {
+    file: "team-profile-deferred-missing-revisit.json",
+    schema: "team-profile",
+    expect: "must have required property 'revisit'",
+  },
+];
+
+describe("invalid fixtures", () => {
+  it("covers every schema at least twice", () => {
+    for (const name of SCHEMA_NAMES) {
+      const count = INVALID_CASES.filter((c) => c.schema === name).length;
+      expect(count, `invalid cases for ${name}`).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it("references every file in fixtures/invalid", () => {
+    const referenced = new Set(INVALID_CASES.map((c) => c.file));
+    for (const file of listFixtures("invalid")) {
+      expect(referenced.has(file), `unreferenced invalid fixture: ${file}`).toBe(true);
+    }
+  });
+
+  it.each(INVALID_CASES)("$file fails with expected first error", (testCase) => {
+    const r = validate(testCase.schema, readFixture("invalid", testCase.file));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[0]).toContain(testCase.expect);
+  });
+});

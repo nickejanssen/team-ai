@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nickejanssen/team-ai/schemas/manifest.schema.json",
+  "title": "Hub domain manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["domains"],
+  "properties": {
+    "domains": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/domain" }
+    }
+  },
+  "$defs": {
+    "domain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "description",
+        "keywords",
+        "kb_namespace",
+        "subagent",
+        "model_tier",
+        "owner"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "description": { "type": "string" },
+        "keywords": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "kb_namespace": { "type": "string" },
+        "subagent": { "type": "string" },
+        "model_tier": {
+          "type": "string",
+          "enum": ["none", "small", "large"]
+        },
+        "owner": { "type": "string" },
+        "repo": { "type": "string" },
+        "escalate_to": { "type": "string" }
+      }
+    }
+  }
+}
