@@ -1,7 +1,7 @@
 {
   "planPath": "docs/plans/2026-08-30-team-ai-framework.md",
   "note": "Native Task tools were unavailable in the authoring session; this file is the manual persistence fallback. Full Goal/Files/Acceptance/Verify/Steps for each task live in the plan .md under the matching heading. Execute with /superpowers-extended-cc:executing-plans docs/plans/2026-08-30-team-ai-framework.md",
-  "lastUpdated": "2026-08-31T18:18:36.877Z",
+  "lastUpdated": "2026-08-31T18:40:47.228Z",
   "tasks": [
     {
       "id": 0,
@@ -253,7 +253,7 @@
     {
       "id": 27,
       "subject": "Task 27: Non-destructive idempotent template renderer",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         22
       ],
@@ -262,7 +262,7 @@
     {
       "id": 28,
       "subject": "Task 28: templates/instance/ tree",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         27,
         19,
@@ -275,7 +275,7 @@
     {
       "id": 29,
       "subject": "Task 29: Agent, skill, and persona templates",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         28,
         29
