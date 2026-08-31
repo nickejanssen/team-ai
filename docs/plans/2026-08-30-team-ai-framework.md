@@ -1014,7 +1014,7 @@ git add -A && git commit -m "feat(retrieval): adapter interface, Hit contract, i
 
 **Acceptance Criteria:**
 - [ ] `new LexicalAdapter({ kbRoot, dbPath })`; `reindex()` builds an FTS5 table `chunks(text, doc_id UNINDEXED, chunk_id UNINDEXED, path UNINDEXED, heading_path UNINDEXED, metadata UNINDEXED)`.
-- [ ] `search(q, {k})` returns `Hit[]` ordered by relevance, `score` normalized: `score = 1 / (1 + bm25)` then min-max across the result set so top hit ≈ 1.0, clamped to `[0,1]`.
+- [ ] `search(q, {k})` returns `Hit[]` ordered by relevance, `score` **absolute-normalized** (NOT min-max — min-max crushes a relevant 2nd hit to 0.0 and breaks the refuse threshold): `score_i = clamp(-bm25_i / (-bm25_i + K), 0, 1)` where FTS5 `bm25()` is negative for matches (more negative = better), a non-negative bm25 maps to score 0, and `K` is tuned so a strong multi-term match scores > 0.55 while a single-common-word match scores < 0.4. Document the formula + `K` choice. Consequence: a weak top hit correctly scores low, so the 0.2 refuse threshold in Tasks 12/15 is meaningful.
 - [ ] `k` defaults to 8, hard-capped at 20 even if a larger `k` is passed.
 - [ ] `namespace` and `filters.status`/`filters.sensitivity` are applied as post-filters on chunk metadata.
 - [ ] `get(idOrPath, section?)` returns the full `Document`; `section` returns only that heading's slice.
