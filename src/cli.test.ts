@@ -22,6 +22,7 @@ describe("buildProgram", () => {
     expect(names).toContain("freshness-audit");
     expect(names).toContain("check-agnostic");
     expect(names).toContain("doctor");
+    expect(names).toContain("init");
   });
 
   it("declares the search positional argument", () => {

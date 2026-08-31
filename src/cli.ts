@@ -6,6 +6,7 @@ import * as assembleManifest from "./commands/assemble-manifest.js";
 import * as checkAgnostic from "./commands/check-agnostic.js";
 import * as doctor from "./commands/doctor.js";
 import * as freshnessAudit from "./commands/freshness-audit.js";
+import * as init from "./generator/init.js";
 import * as reindex from "./commands/reindex.js";
 import * as runEvals from "./commands/run-evals.js";
 import * as search from "./commands/search.js";
@@ -146,6 +147,30 @@ export function buildProgram(): Command {
         .option("--strict", "treat not-built-yet and remaining items as failures", false);
     },
     run: doctor.run,
+  });
+
+  registerCommand(program, {
+    name: "init",
+    description: "Run the interview and generate an instance without overwriting human work",
+    configure: (command) => {
+      command
+        .option("--dir <dir>", "target directory to generate into", ".")
+        .option("--dry-run", "classify what would be written; write nothing", false)
+        .option("--resume", "resume a saved interview instead of starting fresh", false)
+        .addOption(
+          new Option(
+            "--on-conflict <mode>",
+            "coexistence strategy when files or an existing harness collide",
+          ).choices(["adopt-existing", "siblings", "subdir", "abort"]),
+        )
+        .addOption(
+          new Option(
+            "--preflight-target <dir>",
+            "directory to preflight-scan (testing)",
+          ).hideHelp(),
+        );
+    },
+    run: init.run,
   });
 
   // `search` takes a positional argument, which the shared helper does not
