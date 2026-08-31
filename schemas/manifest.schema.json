@@ -8,11 +8,11 @@
   "properties": {
     "domains": {
       "type": "array",
-      "items": { "$ref": "#/$defs/domain" }
+      "items": { "$ref": "#/$defs/manifestDomain" }
     }
   },
   "$defs": {
-    "domain": {
+    "manifestDomain": {
       "type": "object",
       "additionalProperties": false,
       "required": [

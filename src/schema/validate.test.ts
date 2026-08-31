@@ -4,7 +4,21 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { type SchemaName } from "./load.js";
+import type { Manifest, ModelTier } from "./types.js";
 import { validate } from "./validate.js";
+
+const MINIMAL_FRONTMATTER = {
+  id: "x.platform.rate-limits",
+  namespace: "platform",
+  title: "Rate limits",
+  owner: "solutions-architect",
+  status: "active",
+  review_by: "2026-12-01",
+  sensitivity: "internal",
+  source: "authored",
+  tags: ["429"],
+  supersedes: [],
+};
 
 describe("frontmatter schema", () => {
   it("accepts a minimal valid doc", () => {
@@ -38,6 +52,13 @@ describe("frontmatter schema", () => {
     });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors[0]).toContain("/status");
+  });
+
+  it("returns the exact input object as value on success", () => {
+    const input = { ...MINIMAL_FRONTMATTER };
+    const r = validate("frontmatter", input);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(input);
   });
 
   it("accepts a relations block", () => {
@@ -92,6 +113,55 @@ describe("agent schema", () => {
   });
 });
 
+describe("schema name to result type binding", () => {
+  it("infers the value type from the schema name", () => {
+    const r = validate("manifest", { domains: [] });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const domains: Manifest["domains"] = r.value.domains;
+      expect(Array.isArray(domains)).toBe(true);
+    }
+  });
+
+  it("rejects a mismatched explicit type parameter at compile time", () => {
+    // @ts-expect-error Manifest does not satisfy `N extends SchemaName`
+    const r = validate<Manifest>("agent", {});
+    expect(r.ok).toBe(false);
+  });
+});
+
+const MODEL_TIERS = ["none", "small", "large"] as const;
+
+describe("model_tier enum consistency", () => {
+  it("matches the ModelTier type members exactly", () => {
+    const everyTier: Record<ModelTier, true> = { none: true, small: true, large: true };
+    const fromArray: readonly ModelTier[] = MODEL_TIERS;
+    expect(Object.keys(everyTier).sort()).toEqual([...fromArray].sort());
+  });
+
+  it.each([
+    { schema: "agent", path: ["properties", "model_tier", "enum"] },
+    { schema: "manifest", path: ["$defs", "manifestDomain", "properties", "model_tier", "enum"] },
+    { schema: "spoke", path: ["$defs", "spokeDomain", "properties", "model_tier", "enum"] },
+  ])("$schema uses the canonical model_tier enum", ({ schema, path }) => {
+    expect(nodeAt(readSchema(schema), path)).toEqual([...MODEL_TIERS]);
+  });
+});
+
+function readSchema(name: string): Record<string, unknown> {
+  const path = fileURLToPath(new URL(`../../schemas/${name}.schema.json`, import.meta.url));
+  return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+}
+
+function nodeAt(root: Record<string, unknown>, path: string[]): unknown {
+  let node: unknown = root;
+  for (const key of path) {
+    if (typeof node !== "object" || node === null) return undefined;
+    node = (node as Record<string, unknown>)[key];
+  }
+  return node;
+}
+
 const SCHEMA_NAMES: SchemaName[] = ["team-profile", "frontmatter", "agent", "manifest", "spoke"];
 
 function schemaFromFilename(file: string): SchemaName {
@@ -136,6 +206,17 @@ const INVALID_CASES: { file: string; schema: SchemaName; expect: string }[] = [
   },
   { file: "agent-bad-tier.json", schema: "agent", expect: "/model_tier" },
   { file: "agent-negative-hops.json", schema: "agent", expect: "/max_hops" },
+  {
+    file: "frontmatter-bad-date.json",
+    schema: "frontmatter",
+    expect: 'must match format "date"',
+  },
+  { file: "frontmatter-bad-source.json", schema: "frontmatter", expect: "must match pattern" },
+  {
+    file: "team-profile-bad-datetime.json",
+    schema: "team-profile",
+    expect: 'must match format "date-time"',
+  },
   {
     file: "manifest-domain-missing-owner.json",
     schema: "manifest",

@@ -12,7 +12,7 @@ const addFormats = addFormatsModule.default;
 
 export type SchemaName = "frontmatter" | "agent" | "manifest" | "spoke" | "team-profile";
 
-const ajv = addFormats(new Ajv2020({ allErrors: true, strict: false }));
+const ajv = addFormats(new Ajv2020({ allErrors: true, strict: true }));
 
 export function schemaPath(name: SchemaName): string {
   return fileURLToPath(new URL(`../../schemas/${name}.schema.json`, import.meta.url));

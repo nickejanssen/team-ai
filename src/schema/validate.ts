@@ -1,14 +1,49 @@
 import { loadValidator, type SchemaName } from "./load.js";
+import type { AgentDef, FrontMatter, Manifest, SpokeConfig, TeamProfile } from "./types.js";
+
+export interface SchemaTypeMap {
+  frontmatter: FrontMatter;
+  agent: AgentDef;
+  manifest: Manifest;
+  spoke: SpokeConfig;
+  "team-profile": TeamProfile;
+}
 
 export type ValidateResult<T> = { ok: true; value: T } | { ok: false; errors: string[] };
 
-export function validate<T = unknown>(name: SchemaName, data: unknown): ValidateResult<T> {
+interface AjvErrorLike {
+  instancePath?: string;
+  message?: string;
+  keyword?: string;
+  params?: Record<string, unknown>;
+}
+
+function formatError(error: AjvErrorLike): string {
+  const where = error.instancePath ?? "";
+  const prefix = where.length > 0 ? where : "(root)";
+  let message = error.message ?? "is invalid";
+  const params = error.params ?? {};
+
+  if (error.keyword === "additionalProperties" && typeof params.additionalProperty === "string") {
+    message += ` (${params.additionalProperty})`;
+  }
+
+  const allowed: unknown = params.allowedValues;
+  if (error.keyword === "enum" && Array.isArray(allowed)) {
+    const values = (allowed as unknown[]).map((v) => String(v)).join(", ");
+    message += ` (allowed: ${values})`;
+  }
+
+  return `${prefix} ${message}`.trim();
+}
+
+export function validate<N extends SchemaName>(
+  name: N,
+  data: unknown,
+): ValidateResult<SchemaTypeMap[N]> {
   const v = loadValidator(name);
   if (!v) return { ok: false, errors: [`schema ${name} not found`] };
-  if (v(data)) return { ok: true, value: data as T };
-  const errors = (v.errors ?? []).map((e) => {
-    const where = e.instancePath || "(root)";
-    return `${where} ${e.message ?? "is invalid"}`.trim();
-  });
-  return { ok: false, errors: errors.length ? errors : ["schema validation failed"] };
+  if (v(data)) return { ok: true, value: data as SchemaTypeMap[N] };
+  const errors = (v.errors ?? []).map((e) => formatError(e));
+  return { ok: false, errors: errors.length > 0 ? errors : ["schema validation failed"] };
 }

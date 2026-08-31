@@ -41,7 +41,7 @@
       "required": ["path", "sha256"],
       "properties": {
         "path": { "type": "string" },
-        "sha256": { "type": "string" }
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
       }
     }
   }
