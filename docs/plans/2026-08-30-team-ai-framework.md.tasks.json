@@ -1,7 +1,7 @@
 {
   "planPath": "docs/plans/2026-08-30-team-ai-framework.md",
   "note": "Native Task tools were unavailable in the authoring session; this file is the manual persistence fallback. Full Goal/Files/Acceptance/Verify/Steps for each task live in the plan .md under the matching heading. Execute with /superpowers-extended-cc:executing-plans docs/plans/2026-08-30-team-ai-framework.md",
-  "lastUpdated": "2026-08-31T12:09:47.253Z",
+  "lastUpdated": "2026-08-31T12:17:30.119Z",
   "tasks": [
     {
       "id": 0,
@@ -151,7 +151,7 @@
     {
       "id": 16,
       "subject": "Task 16: validate-spoke command",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         11
       ],
