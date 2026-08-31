@@ -88,4 +88,37 @@ describe("findCitationsInText", () => {
   it("returns an empty array when there are no KB links", () => {
     expect(findCitationsInText("no links here, just [text](https://x.com).")).toEqual([]);
   });
+
+  it("extracts the target from titled inline links, discarding the title", () => {
+    const text = [
+      'A [double](platform/rl.md#auth "Auth section") link.',
+      "A [single](platform/other.md 'Other doc') link.",
+    ].join("\n");
+    expect(findCitationsInText(text)).toEqual(["platform/rl.md#auth", "platform/other.md"]);
+  });
+
+  it("strips angle brackets from inline link targets", () => {
+    expect(findCitationsInText("See [x](<platform/rl.md#auth>) here.")).toEqual([
+      "platform/rl.md#auth",
+    ]);
+  });
+
+  it("scans reference-style link definitions", () => {
+    const text = [
+      "Text with a [ref link][a] and another [b].",
+      "",
+      "  [a]: platform/rl.md#auth",
+      '[b]: <platform/other.md> "titled"',
+    ].join("\n");
+    expect(findCitationsInText(text)).toEqual(["platform/rl.md#auth", "platform/other.md"]);
+  });
+
+  it("excludes external links in titled and angle-bracket forms", () => {
+    const text = [
+      'External [a](https://example.com/guide "Guide").',
+      "External [b](<https://example.com/x.md>).",
+      "[c]: https://example.com/ref.md",
+    ].join("\n");
+    expect(findCitationsInText(text)).toEqual([]);
+  });
 });

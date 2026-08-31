@@ -2,7 +2,11 @@
 
 import type { FrontMatter } from "../schema/types.js";
 import { scanLines } from "./headings.js";
+import { slug } from "./slugify.js";
 import type { KbDoc } from "./types.js";
+
+// Re-exported for existing importers; canonical home is ./slugify.js.
+export { slug } from "./slugify.js";
 
 export interface Chunk {
   doc_id: string;
@@ -21,15 +25,6 @@ const TARGET = 800;
 export function estimateTokens(text: string): number {
   const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
   return Math.ceil(wordCount * 1.3);
-}
-
-// Lowercase, collapse runs of non-[a-z0-9] to a single `-`, trim leading/trailing `-`.
-export function slug(headingPath: string): string {
-  return headingPath
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+/, "")
-    .replace(/-+$/, "");
 }
 
 interface Section {
