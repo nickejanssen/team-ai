@@ -3,6 +3,8 @@ coverage
 node_modules
 package-lock.json
 templates/**/*.hbs
+src/interview/gates/**
+src/interview/doc-templates/**
 docs/plans
 *.md
 LICENSE

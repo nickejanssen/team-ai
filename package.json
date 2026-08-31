@@ -22,7 +22,9 @@
     "catalog",
     "templates",
     "skills",
-    "src/interview/questions.yaml"
+    "src/interview/questions.yaml",
+    "src/interview/gates",
+    "src/interview/doc-templates"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
