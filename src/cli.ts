@@ -5,6 +5,7 @@ import { Command, Option } from "commander";
 import * as assembleManifest from "./commands/assemble-manifest.js";
 import * as checkAgnostic from "./commands/check-agnostic.js";
 import * as doctor from "./commands/doctor.js";
+import * as emit from "./commands/emit.js";
 import * as freshnessAudit from "./commands/freshness-audit.js";
 import * as attach from "./generator/attach.js";
 import * as init from "./generator/init.js";
@@ -226,6 +227,24 @@ export function buildProgram(): Command {
       command.option("--dir <dir>", "instance directory containing team-profile.yaml", ".");
     },
     run: upgrade.run,
+  });
+
+  registerCommand(program, {
+    name: "emit",
+    description: "Translate an instance into a target platform's agent layout",
+    configure: (command) => {
+      command
+        .addOption(
+          new Option("--target <target>", "output format").choices([
+            "claude-code",
+            "mcp-only",
+            "generic",
+          ]),
+        )
+        .option("--dir <dir>", "instance directory", ".")
+        .option("--out <dir>", "output directory (should be gitignored)", "emitted");
+    },
+    run: emit.run,
   });
 
   // `search` takes a positional argument, which the shared helper does not
