@@ -4,11 +4,12 @@
 // index of the chunked knowledge base with better-sqlite3's bundled FTS5 and
 // serves BM25-ranked hits with scores normalized to 0..1.
 
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 import Database from "better-sqlite3";
 
+import type { Chunk } from "../kb/chunk.js";
 import { chunkDoc } from "../kb/chunk.js";
 import { loadKb } from "../kb/loader.js";
 import { slug } from "../kb/slugify.js";
@@ -83,24 +84,26 @@ export class LexicalAdapter implements RetrievalAdapter {
     const docs = await loadKb(this.kbRoot);
     const chunks = docs.flatMap((doc) => chunkDoc(doc));
 
-    db.exec("DROP TABLE IF EXISTS chunks");
-    db.exec(
-      "CREATE VIRTUAL TABLE chunks USING fts5(" +
-        "text, " +
-        "doc_id UNINDEXED, " +
-        "chunk_id UNINDEXED, " +
-        "path UNINDEXED, " +
-        "heading_path UNINDEXED, " +
-        "metadata UNINDEXED)",
-    );
-
-    const insert = db.prepare(
-      "INSERT INTO chunks (text, doc_id, chunk_id, path, heading_path, metadata) " +
-        "VALUES (?, ?, ?, ?, ?, ?)",
-    );
-    // One transaction, stable insert order (chunkDoc is deterministic) so two
-    // reindexes produce byte-identical tables and identical search output.
-    const insertAll = db.transaction((rows: typeof chunks) => {
+    // DROP + CREATE + all inserts run in ONE transaction (SQLite DDL is
+    // transactional): a mid-reindex failure rolls back to the prior index
+    // rather than leaving an empty-but-queryable table. Insert order is stable
+    // (chunkDoc is deterministic), so repeat reindexes yield an identical table
+    // and byte-identical search output.
+    const rebuild = db.transaction((rows: Chunk[]) => {
+      db.exec("DROP TABLE IF EXISTS chunks");
+      db.exec(
+        "CREATE VIRTUAL TABLE chunks USING fts5(" +
+          "text, " +
+          "doc_id UNINDEXED, " +
+          "chunk_id UNINDEXED, " +
+          "path UNINDEXED, " +
+          "heading_path UNINDEXED, " +
+          "metadata UNINDEXED)",
+      );
+      const insert = db.prepare(
+        "INSERT INTO chunks (text, doc_id, chunk_id, path, heading_path, metadata) " +
+          "VALUES (?, ?, ?, ?, ?, ?)",
+      );
       for (const c of rows) {
         insert.run(
           c.text,
@@ -112,7 +115,7 @@ export class LexicalAdapter implements RetrievalAdapter {
         );
       }
     });
-    insertAll(chunks);
+    rebuild(chunks);
 
     return {
       documents: docs.length,
@@ -125,23 +128,41 @@ export class LexicalAdapter implements RetrievalAdapter {
   // Not `async`: all work is synchronous (better-sqlite3 is sync). The Promise
   // return type keeps the RetrievalAdapter contract uniform across drivers.
   search(query: string, opts: SearchOpts = {}): Promise<Hit[]> {
-    return Promise.resolve(this.searchSync(query, opts));
+    try {
+      return Promise.resolve(this.searchSync(query, opts));
+    } catch (err) {
+      return Promise.reject(err instanceof Error ? err : new Error(String(err)));
+    }
   }
 
   private searchSync(query: string, opts: SearchOpts): Hit[] {
     const match = sanitizeQuery(query);
     if (match === null) return [];
 
+    // Fail clearly (and without creating a stray empty db file) when search runs
+    // before the first reindex.
+    if (this.handle === null && !existsSync(this.dbPath)) {
+      throw new Error("index not built — run reindex() first");
+    }
+
     const k = clampK(opts.k);
     const limit = Math.min(k * CANDIDATE_MULTIPLIER, CANDIDATE_CAP);
     const db = this.db();
 
-    const rows = db
-      .prepare(
-        "SELECT text, doc_id, chunk_id, path, heading_path, metadata, bm25(chunks) AS bm25 " +
-          "FROM chunks WHERE chunks MATCH ? ORDER BY bm25 LIMIT ?",
-      )
-      .all(match, limit) as ChunkRow[];
+    let rows: ChunkRow[];
+    try {
+      rows = db
+        .prepare(
+          "SELECT text, doc_id, chunk_id, path, heading_path, metadata, bm25(chunks) AS bm25 " +
+            "FROM chunks WHERE chunks MATCH ? ORDER BY bm25 LIMIT ?",
+        )
+        .all(match, limit) as ChunkRow[];
+    } catch (err) {
+      if (err instanceof Error && /no such table/.test(err.message)) {
+        throw new Error("index not built — run reindex() first");
+      }
+      throw err;
+    }
 
     // Post-filter on parsed metadata, then take the top k. Filtering happens
     // after the SQL LIMIT (k*4, capped 80) so filters never widen the search.
@@ -149,14 +170,12 @@ export class LexicalAdapter implements RetrievalAdapter {
       .map((row) => ({ row, meta: parseMeta(row.metadata) }))
       .filter(({ meta }) => passesFilters(meta, opts));
 
-    const scores = normalizeScores(filtered.map(({ row }) => row.bm25));
-
-    return filtered.slice(0, k).map(({ row, meta }, i) => ({
+    return filtered.slice(0, k).map(({ row, meta }) => ({
       doc_id: row.doc_id,
       chunk_id: row.chunk_id,
       path: row.path,
       heading_path: row.heading_path,
-      score: scores[i] ?? 1,
+      score: scoreFromBm25(row.bm25),
       text: row.text,
       metadata: meta,
     }));
@@ -240,24 +259,26 @@ function passesFilters(meta: ChunkMeta, opts: SearchOpts): boolean {
 }
 
 // Score normalization (documented formula):
-//   bm25() returns lower = more relevant (values are negative-ish).
-//   1. min_bm25 = the most-relevant (smallest) bm25 in the result set.
-//      raw_i = 1 / (1 + (bm25_i - min_bm25))   -> best result raw = 1, others in (0, 1].
-//   2. min-max normalize raw across the set:
-//      score_i = (raw_i - min_raw) / (max_raw - min_raw)   -> top hit = 1.0.
-//   3. clamp every score to [0, 1].
-// A single-result set (or an all-equal set) scores 1.0.
-function normalizeScores(bm25s: number[]): number[] {
-  if (bm25s.length === 0) return [];
-  const minBm25 = Math.min(...bm25s);
-  const raw = bm25s.map((b) => 1 / (1 + (b - minBm25)));
-  const minRaw = Math.min(...raw);
-  const maxRaw = Math.max(...raw);
-  if (maxRaw === minRaw) return raw.map(() => 1);
-  return raw.map((r) => {
-    const s = (r - minRaw) / (maxRaw - minRaw);
-    return Math.min(1, Math.max(0, s));
-  });
+//   FTS5 bm25() is negative for a match and more negative = more relevant; a
+//   non-match or a value >= 0 scores 0.
+//   Let rel = -bm25 (positive; larger = better). Then:
+//     score = rel / (rel + BM25_K)
+//   This is ABSOLUTE, not min-anchored across the result set: a weak top hit
+//   scores low (so the 0.2 "cite or refuse" threshold downstream stays
+//   meaningful), and a genuinely-relevant 2nd result keeps a real score instead
+//   of being crushed to 0 by min-max normalization.
+//
+// BM25_K = 3 was tuned against the fixture KB (observed scores):
+//   - search("what to do about 429 rate limit errors") top hit 0.63  (> 0.55)
+//   - search("team")  (single common word)             top hit 0.31  (< 0.4)
+//   - search("the")   (stopword-frequency term)        bm25 >= 0 -> score 0
+//   - search("kubernetes helm chart deployment") (absent) -> [] (no FTS match)
+const BM25_K = 3;
+
+function scoreFromBm25(bm25: number): number {
+  const rel = -bm25;
+  if (rel <= 0) return 0;
+  return Math.min(1, Math.max(0, rel / (rel + BM25_K)));
 }
 
 // Slice `body` to a single `## `/`### ` section: from the matching heading line

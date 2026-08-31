@@ -18,19 +18,55 @@ describe("LexicalAdapter", () => {
     const hits = await a.search("what to do about 429 rate limit errors", { k: 5 });
     a.close();
     expect(hits[0]?.path).toMatch(/rate/);
-    expect(hits[0]?.score).toBeGreaterThan(0.5);
+    expect(hits[0]?.score).toBeGreaterThan(0.55);
     expect(hits[0]?.score).toBeLessThanOrEqual(1);
     expect(hits.every((h) => h.score >= 0 && h.score <= 1)).toBe(true);
   });
 
-  it("caps k at 20 and is idempotent", async () => {
+  it("scores a single common-word query low (absolute, not min-anchored)", async () => {
     const a = adapter();
-    const s1 = await a.reindex();
-    const s2 = await a.reindex();
-    expect(s2.chunks).toBe(s1.chunks);
+    await a.reindex();
+    const hits = await a.search("team");
+    a.close();
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0]?.score).toBeLessThan(0.4);
+  });
+
+  it("returns nothing (or a very low score) for content absent from the KB", async () => {
+    const a = adapter();
+    await a.reindex();
+    const hits = await a.search("kubernetes helm chart deployment");
+    a.close();
+    expect(hits.length === 0 || (hits[0]?.score ?? 1) < 0.2).toBe(true);
+  });
+
+  it("keeps a genuinely-relevant 2nd hit above the refuse floor", async () => {
+    const a = adapter();
+    await a.reindex();
+    const hits = await a.search("token rotation revocation rate limit 429 backoff", { k: 10 });
+    a.close();
+    expect(hits.length).toBeGreaterThanOrEqual(2);
+    expect(hits[1]?.score).toBeGreaterThan(0.1);
+  });
+
+  it("caps k at 20", async () => {
+    const a = adapter();
+    await a.reindex();
     const hits = await a.search("auth token", { k: 999 });
     a.close();
     expect(hits.length).toBeLessThanOrEqual(20);
+  });
+
+  it("reindex is idempotent: identical hits and scores after a second build", async () => {
+    const a = adapter();
+    await a.reindex();
+    const first = await a.search("rate limit 429 backoff escalation", { k: 10 });
+    const s1 = await a.reindex();
+    const s2 = await a.reindex();
+    const second = await a.search("rate limit 429 backoff escalation", { k: 10 });
+    a.close();
+    expect(s2.chunks).toBe(s1.chunks);
+    expect(second).toEqual(first);
   });
 
   it("post-filters by namespace", async () => {
@@ -38,7 +74,20 @@ describe("LexicalAdapter", () => {
     await a.reindex();
     const hits = await a.search("charter mission auth rate", { namespace: "operating", k: 10 });
     a.close();
+    expect(hits.length).toBeGreaterThan(0);
     expect(hits.every((h) => h.metadata.namespace === "operating")).toBe(true);
+  });
+
+  it("post-filters by status and tags", async () => {
+    const a = adapter();
+    await a.reindex();
+    const hits = await a.search("rate limit token charter", {
+      k: 10,
+      filters: { status: ["active"], tags: ["429"] },
+    });
+    a.close();
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.every((h) => h.path === "platform/rate-limits.md")).toBe(true);
   });
 
   it("returns [] for a query that sanitizes to empty", async () => {
@@ -49,18 +98,37 @@ describe("LexicalAdapter", () => {
     expect(hits).toEqual([]);
   });
 
-  it("get() returns a document and a section slice", async () => {
+  it("never throws on adversarial queries and the index survives", async () => {
+    const a = adapter();
+    await a.reindex();
+    const nasty = [
+      '"',
+      "foo AND OR NEAR",
+      "col:val",
+      "a* b(",
+      "x); DROP TABLE chunks;--",
+      "",
+      "   ",
+    ];
+    for (const q of nasty) {
+      await expect(a.search(q)).resolves.toBeInstanceOf(Array);
+    }
+    const ok = await a.search("auth token");
+    a.close();
+    expect(ok.length).toBeGreaterThan(0);
+  });
+
+  it("throws a clear error when search runs before reindex", async () => {
+    const a = adapter();
+    await expect(a.search("anything")).rejects.toThrow(/index not built/);
+    a.close();
+  });
+
+  it("get() returns a document and resolves by path", async () => {
     const a = adapter();
     await a.reindex();
     const doc = await a.get("platform/rate-limits.md");
     expect(doc.frontmatter.namespace).toBe("platform");
-    a.close();
-  });
-
-  it("get() throws for unknown id", async () => {
-    const a = adapter();
-    await a.reindex();
-    await expect(a.get("nope/missing.md")).rejects.toThrow(/no document/);
     a.close();
   });
 
@@ -75,6 +143,13 @@ describe("LexicalAdapter", () => {
     expect(doc.body).not.toContain("## Token Types");
   });
 
+  it("get() throws for unknown id", async () => {
+    const a = adapter();
+    await a.reindex();
+    await expect(a.get("nope/missing.md")).rejects.toThrow(/no document/);
+    a.close();
+  });
+
   it("get() throws for an unknown section", async () => {
     const a = adapter();
     await a.reindex();
@@ -82,17 +157,5 @@ describe("LexicalAdapter", () => {
       /no section 'nope' in platform\/auth\.md/,
     );
     a.close();
-  });
-
-  it("post-filters by status and tags", async () => {
-    const a = adapter();
-    await a.reindex();
-    const hits = await a.search("rate limit token charter", {
-      k: 10,
-      filters: { status: ["active"], tags: ["429"] },
-    });
-    a.close();
-    expect(hits.length).toBeGreaterThan(0);
-    expect(hits.every((h) => h.path === "platform/rate-limits.md")).toBe(true);
   });
 });
