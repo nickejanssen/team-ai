@@ -105,9 +105,10 @@ questions:
     type: single_select
     prompt: What are you setting up?
     why: >-
-      Mode decides how much of the stack gets generated. A spoke or an attach
-      reuses an existing instance and skips the knowledge and architecture acts
-      entirely. See docs/quality-bar.md#q3.
+      Mode decides how much of the stack gets generated. This bank is the new
+      instance flow; `team-ai spoke` and `team-ai attach` run their own short
+      prompt sequences (built in a later task) and do not walk this bank. See
+      docs/quality-bar.md#q3.
     options:
       - value: instance
         label: A new team instance
@@ -379,17 +380,6 @@ questions:
     allow_defer: true
     ask_if: always
 
-  - id: kb.graph_questions
-    act: 2
-    type: text
-    prompt: Name two questions you want answered that keyword or vector search cannot handle.
-    why: >-
-      Graph is only worth its cost for genuinely relational answers. Naming the
-      questions is the honest test of whether you have them. See
-      docs/quality-bar.md#q11.
-    allow_defer: true
-    ask_if: arch.index_driver == "graph"
-
   # ───────────────────────── Act 3: Architecture and cost ─────────────────────
   - id: arch.index_driver
     act: 3
@@ -415,6 +405,17 @@ questions:
     default: lexical
     allow_defer: true
     ask_if: always
+
+  - id: kb.graph_questions
+    act: 3
+    type: text
+    prompt: Name two questions you want answered that keyword or vector search cannot handle.
+    why: >-
+      Graph is only worth its cost for genuinely relational answers. Naming the
+      questions is the honest test of whether you have them. See
+      docs/quality-bar.md#q11.
+    allow_defer: true
+    ask_if: arch.index_driver == "graph"
 
   - id: arch.hosting
     act: 3

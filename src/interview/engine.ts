@@ -78,7 +78,11 @@ export class Engine {
     return out;
   }
 
-  /** Next step to present, or `null` once the interview is done. Pure query. */
+  /**
+   * Next step to present, or `null` once the interview is done. Advances
+   * `this.state.phase` to reflect the current position; does not otherwise
+   * mutate. `computeStep()` never reads `phase`, so save/load is unaffected.
+   */
   next(): Step | null {
     const step = this.computeStep();
     this.state.phase = this.phaseFor(step);
@@ -126,11 +130,18 @@ export class Engine {
       record = { value, via: "direct" };
     }
 
+    const alreadyAnswered = id in this.state.answers;
     this.state.answers[id] = record;
 
-    // An explicit answer for a key that was previously derived wins outright.
+    // An explicit answer for a key another question had derived wins outright.
     const selfDerived = this.state.derived[id];
     if (selfDerived) selfDerived.overridden = true;
+
+    // Re-answering: retract the previous choice's derivations before applying
+    // the new option's implies, so `derived` never carries a stale pre-fill.
+    for (const k of Object.keys(this.state.derived)) {
+      if (this.state.derived[k]?.from === id) delete this.state.derived[k];
+    }
 
     for (const implies of impliesList) {
       for (const [k, v] of Object.entries(implies)) {
@@ -144,7 +155,8 @@ export class Engine {
       }
     }
 
-    this.state.history.push(id);
+    // The id is already in `history` on a re-answer; don't record it twice.
+    if (!alreadyAnswered) this.state.history.push(id);
   }
 
   /** Alias for `answer(id, "__defer__")`. */

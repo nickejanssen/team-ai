@@ -78,6 +78,61 @@ describe("Engine", () => {
     expect((rec?.why ?? "").length).toBeGreaterThan(0);
   });
 
+  it("re-answers consistently: new derivations replace old, history stays single, one back undoes it", () => {
+    const engine = new Engine(bank);
+
+    engine.answer("kb.substrate", "md-git");
+    expect(engine.effectiveAnswers()["arch.index_driver"]).toBe("lexical");
+    expect(engine.effectiveAnswers()["kb.write_back"]).toBe("pr-only");
+
+    engine.answer("kb.substrate", "db-native");
+    // db-native implies only `warn` — every prior derivation is retracted.
+    expect(engine.effectiveAnswers()["arch.index_driver"]).toBeUndefined();
+    expect(engine.effectiveAnswers()["kb.write_back"]).toBeUndefined();
+    expect(engine.save().derived).toEqual({});
+    expect(engine.warnings()).toContain("kb.substrate");
+
+    const state = engine.save();
+    expect(state.history.filter((h) => h === "kb.substrate")).toEqual(["kb.substrate"]);
+
+    engine.back();
+    const after = engine.save();
+    expect(after.answers["kb.substrate"]).toBeUndefined();
+    expect(after.derived).toEqual({});
+    expect(after.history).toEqual([]);
+  });
+
+  it("keeps the graph follow-up in act 3 so a confirmed gate 1 is never jumped back over", () => {
+    const engine = new Engine(bank);
+    const phases: string[] = [];
+    for (let guard = 0; guard < 500; guard++) {
+      const step = engine.next();
+      phases.push(engine.save().phase);
+      if (step === null) break;
+      if (step.kind === "gate") {
+        engine.confirmGate(step.gate);
+        continue;
+      }
+      // Force the graph driver so kb.graph_questions becomes askable.
+      engine.answer(
+        step.question.id,
+        step.question.id === "arch.index_driver" ? "graph" : pick(step.question),
+      );
+    }
+
+    const emitted = engine.save().history;
+    expect(emitted).toContain("kb.graph_questions");
+    // The follow-up is asked inside act 3, before gate 2.
+    const graphIdx = emitted.indexOf("kb.graph_questions");
+    const driverIdx = emitted.indexOf("arch.index_driver");
+    expect(graphIdx).toBeGreaterThan(driverIdx);
+    // Phase never regresses to act:2 once gate:1 has been seen.
+    const gate1At = phases.indexOf("gate:1");
+    expect(gate1At).toBeGreaterThanOrEqual(0);
+    expect(phases.slice(gate1At + 1)).not.toContain("act:2");
+    expect(engine.save().phase).toBe("done");
+  });
+
   it("validates option values on direct answers", () => {
     const engine = new Engine(bank);
     expect(() => engine.answer("kb.substrate", "nope")).toThrow(/not a valid option/);

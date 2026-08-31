@@ -24,11 +24,11 @@ const ACT_0_2_IDS = [
   "kb.sources_strategy",
   "kb.sensitivity",
   "kb.write_back",
-  "kb.graph_questions",
 ].sort();
 
 const ACT_3_4_IDS = [
   "arch.index_driver",
+  "kb.graph_questions",
   "arch.hosting",
   "arch.language",
   "arch.ci",

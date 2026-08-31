@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 
 import { validate } from "../schema/validate.js";
-import type { Question, RawQuestion } from "./types.js";
+import type { Question, QuestionOption, RawQuestion } from "./types.js";
 
 export type { Question, QuestionOption, QuestionType, RawQuestion } from "./types.js";
 
@@ -26,20 +26,21 @@ export function questionsPath(): string {
 }
 
 function normalize(raw: RawQuestion): Question {
+  const options = (raw.options ?? []).map((option) => Object.freeze({ ...option }));
   const question: Question = {
     id: raw.id,
     act: raw.act,
     type: raw.type,
     prompt: raw.prompt,
     why: raw.why,
-    options: raw.options ?? [],
+    options: Object.freeze(options) as QuestionOption[],
     allow_defer: raw.allow_defer ?? false,
     ask_if: raw.ask_if,
   };
   if ("default" in raw) question.default = raw.default;
   if ("recommend" in raw) question.recommend = raw.recommend;
   if (raw.recommend_why !== undefined) question.recommend_why = raw.recommend_why;
-  return question;
+  return Object.freeze(question);
 }
 
 export function loadBank(): Question[] {
@@ -51,5 +52,5 @@ export function loadBank(): Question[] {
     throw new Error(`questions.yaml is invalid:\n  ${result.errors.join("\n  ")}`);
   }
 
-  return result.value.questions.map(normalize);
+  return Object.freeze(result.value.questions.map(normalize)) as Question[];
 }
