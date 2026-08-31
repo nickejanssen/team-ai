@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
 export function packageVersion(): string {
-  const pkgPath = fileURLToPath(new URL("../package.json", import.meta.url));
-  const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { version: string };
+  const pkg = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+  ) as { version: string };
   return pkg.version;
 }
