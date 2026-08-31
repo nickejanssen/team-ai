@@ -1,36 +1,25 @@
 import js from "@eslint/js";
-import tseslint from "@typescript-eslint/eslint-plugin";
-import tsparser from "@typescript-eslint/parser";
+import tseslint from "typescript-eslint";
 import prettier from "eslint-config-prettier";
 
-export default [
-  {
-    ignores: [
-      "dist/**",
-      "node_modules/**",
-      "templates/**",
-      "coverage/**",
-      ".tmp-dogfood/**",
-      ".tmp-test/**",
-      "vitest.config.ts",
-    ],
-  },
+export default tseslint.config(
+  { ignores: ["dist/**", "coverage/**", "templates/**", "vitest.config.ts"] },
   js.configs.recommended,
+  ...tseslint.configs.recommendedTypeChecked,
   {
     files: ["**/*.ts"],
     languageOptions: {
-      parser: tsparser,
-      parserOptions: { project: "./tsconfig.json", sourceType: "module" },
+      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
     },
-    plugins: { "@typescript-eslint": tseslint },
     rules: {
-      ...tseslint.configs["recommended-type-checked"].rules,
-      "no-undef": "off",
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/explicit-function-return-type": ["error", { allowExpressions: true }],
-      "no-console": "off",
     },
   },
+  {
+    files: ["**/*.js"],
+    extends: [tseslint.configs.disableTypeChecked],
+  },
   prettier,
-];
+);
