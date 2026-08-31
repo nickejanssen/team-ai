@@ -32,8 +32,6 @@ export function slug(headingPath: string): string {
     .replace(/-+$/, "");
 }
 
-export { slug as slugifyHeadingPath };
-
 interface Section {
   headingPath: string;
   text: string;
@@ -50,9 +48,18 @@ function splitSections(body: string, title: string): Section[] {
     [title, stack[0], stack[1]].filter((s): s is string => Boolean(s)).join(" > ");
 
   const flush = (): void => {
-    const text = currentLines.join("\n").trim();
-    if (inPreamble && text.length === 0) return;
-    sections.push({ headingPath: currentPath, text });
+    if (inPreamble) {
+      const text = currentLines.join("\n").trim();
+      if (text.length === 0) return;
+      sections.push({ headingPath: currentPath, text });
+      return;
+    }
+    // Non-preamble sections open with their heading line; skip any whose body
+    // (everything after that line) is empty or whitespace-only.
+    const headingLine = (currentLines[0] ?? "").replace(/\s+$/, "");
+    const body = currentLines.slice(1).join("\n").trim();
+    if (body.length === 0) return;
+    sections.push({ headingPath: currentPath, text: `${headingLine}\n${body}` });
   };
 
   scanLines(body, (line, heading) => {
@@ -116,15 +123,19 @@ function sectionTexts(section: Section): string[] {
 export function chunkDoc(doc: KbDoc): Chunk[] {
   const sections = splitSections(doc.body, doc.frontmatter.title);
   const chunks: Chunk[] = [];
+  // Keyed by the slug (not the raw heading path) so distinct heading paths that
+  // slug to the same value disambiguate via the ordinal (::0, ::1, ...) instead
+  // of colliding on an identical chunk_id.
   const ordinals = new Map<string, number>();
 
   for (const section of sections) {
+    const headingSlug = slug(section.headingPath);
     for (const text of sectionTexts(section)) {
-      const ordinal = ordinals.get(section.headingPath) ?? 0;
-      ordinals.set(section.headingPath, ordinal + 1);
+      const ordinal = ordinals.get(headingSlug) ?? 0;
+      ordinals.set(headingSlug, ordinal + 1);
       chunks.push({
         doc_id: doc.id,
-        chunk_id: `${doc.id}::${slug(section.headingPath)}::${ordinal}`,
+        chunk_id: `${doc.id}::${headingSlug}::${ordinal}`,
         path: doc.path,
         heading_path: section.headingPath,
         text,

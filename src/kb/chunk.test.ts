@@ -108,6 +108,27 @@ describe("chunkDoc", () => {
     expect(big).toHaveLength(1);
   });
 
+  it("disambiguates chunk_id when distinct heading paths slug to the same value", () => {
+    const chunks = chunkDoc(doc("## A / B\nfirst\n\n## A B\nsecond\n"));
+    const ids = chunks.map((c) => c.chunk_id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toEqual(["x.platform.rl::rate-limits-a-b::0", "x.platform.rl::rate-limits-a-b::1"]);
+    expect(chunks.map((c) => c.heading_path)).toEqual(["Rate limits > A / B", "Rate limits > A B"]);
+  });
+
+  it("detects headings in a CRLF body", () => {
+    const chunks = chunkDoc(doc("intro\r\n\r\n## Auth\r\ntext\r\n"));
+    expect(chunks.map((c) => c.heading_path)).toEqual(["Rate limits", "Rate limits > Auth"]);
+    expect(chunks[1]?.text.startsWith("## Auth")).toBe(true);
+    expect(chunks[1]?.text).not.toContain("\r");
+  });
+
+  it("skips a heading section whose body is empty", () => {
+    const chunks = chunkDoc(doc("## A\n## B\ntext\n"));
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.heading_path).toBe("Rate limits > B");
+  });
+
   it("carries full front matter as metadata", () => {
     const chunks = chunkDoc(doc("## Auth\nx\n"));
     expect(chunks[0]?.metadata.id).toBe("x.platform.rl");

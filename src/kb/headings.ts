@@ -17,7 +17,8 @@ export function scanLines(
   visit: (line: string, heading: ScannedHeading | null) => void,
 ): void {
   let inFence = false;
-  for (const line of body.split("\n")) {
+  for (const rawLine of body.split("\n")) {
+    const line = rawLine.replace(/\r$/, "");
     if (FENCE.test(line)) {
       inFence = !inFence;
       visit(line, null);
