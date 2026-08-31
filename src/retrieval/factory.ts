@@ -34,8 +34,12 @@ export function createAdapter(
 
   switch (driver) {
     case "lexical": {
-      const lexicalOpts: LexicalAdapterOpts = { kbRoot: opts?.kbRoot ?? join(dir, "kb") };
-      if (opts?.dbPath !== undefined) lexicalOpts.dbPath = opts.dbPath;
+      const lexicalOpts: LexicalAdapterOpts = {
+        kbRoot: opts?.kbRoot ?? join(dir, "kb"),
+        // The index belongs to the instance directory, not the process cwd, so
+        // that concurrent instances never share one SQLite file.
+        dbPath: opts?.dbPath ?? join(dir, ".team-ai", "index.sqlite"),
+      };
       return new LexicalAdapter(lexicalOpts);
     }
     case "vector-embedded":

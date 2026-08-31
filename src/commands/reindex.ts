@@ -13,9 +13,6 @@ import type { RetrievalAdapter } from "../retrieval/types.js";
 
 export interface ReindexCommandOptions {
   root?: string;
-  // Internal override so tests can isolate the SQLite file per temp dir. Not a
-  // documented CLI flag.
-  dbPath?: string;
 }
 
 function closeAdapter(adapter: RetrievalAdapter): void {
@@ -31,10 +28,7 @@ export async function run(opts: ReindexCommandOptions): Promise<number> {
     console.log("wrote index.lock");
   }
 
-  const adapter = createAdapter(
-    root,
-    opts.dbPath !== undefined ? { dbPath: opts.dbPath } : undefined,
-  );
+  const adapter = createAdapter(root);
   try {
     const stats = await adapter.reindex();
     console.log(

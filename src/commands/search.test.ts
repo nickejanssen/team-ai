@@ -13,18 +13,18 @@ const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
 const dirs: string[] = [];
 
-function makeInstance(): { root: string; dbPath: string } {
+function makeInstance(): string {
   const root = mkdtempSync(join(tmpdir(), "team-ai-search-"));
   dirs.push(root);
   cpSync("src/kb/fixtures/kb", join(root, "kb"), { recursive: true });
-  return { root, dbPath: join(root, "index.sqlite") };
+  return root;
 }
 
-async function indexed(): Promise<{ root: string; dbPath: string }> {
-  const inst = makeInstance();
-  await reindex({ root: inst.root, dbPath: inst.dbPath });
+async function indexed(): Promise<string> {
+  const root = makeInstance();
+  await reindex({ root });
   log.mockClear();
-  return inst;
+  return root;
 }
 
 afterEach(() => {
@@ -35,20 +35,16 @@ afterEach(() => {
 
 describe("search", () => {
   it("returns 1 with a hint when the index is not built", async () => {
-    const inst = makeInstance();
-    const code = await search("429 rate limit errors", { root: inst.root, dbPath: inst.dbPath });
+    const root = makeInstance();
+    const code = await search("429 rate limit errors", { root });
 
     expect(code).toBe(1);
     expect(error).toHaveBeenCalledWith("index not built — run 'team-ai reindex' first");
   });
 
   it("prints ranked lines for a relevant query", async () => {
-    const inst = await indexed();
-    const code = await search("429 rate limit errors", {
-      root: inst.root,
-      dbPath: inst.dbPath,
-      k: 5,
-    });
+    const root = await indexed();
+    const code = await search("429 rate limit errors", { root, k: 5 });
 
     expect(code).toBe(0);
     const lines = log.mock.calls.map((c) => String(c[0]));
@@ -59,12 +55,8 @@ describe("search", () => {
   });
 
   it("emits a parseable Hit[] with --json", async () => {
-    const inst = await indexed();
-    const code = await search("429 rate limit errors", {
-      root: inst.root,
-      dbPath: inst.dbPath,
-      json: true,
-    });
+    const root = await indexed();
+    const code = await search("429 rate limit errors", { root, json: true });
 
     expect(code).toBe(0);
     const payload: unknown = JSON.parse(String(log.mock.calls[0]?.[0]));
@@ -75,30 +67,22 @@ describe("search", () => {
   });
 
   it("refuses with 'no results above threshold' for an irrelevant query", async () => {
-    const inst = await indexed();
-    const code = await search("kubernetes helm chart", { root: inst.root, dbPath: inst.dbPath });
+    const root = await indexed();
+    const code = await search("kubernetes helm chart", { root });
 
     expect(code).toBe(0);
     expect(log).toHaveBeenCalledWith("no results above threshold");
   });
 
   it("filters by namespace", async () => {
-    const inst = await indexed();
+    const root = await indexed();
 
-    const miss = await search("429 rate limit errors", {
-      root: inst.root,
-      dbPath: inst.dbPath,
-      namespace: ["operating"],
-    });
+    const miss = await search("429 rate limit errors", { root, namespace: ["operating"] });
     expect(miss).toBe(0);
     expect(log).toHaveBeenCalledWith("no results above threshold");
 
     log.mockClear();
-    const hit = await search("429 rate limit errors", {
-      root: inst.root,
-      dbPath: inst.dbPath,
-      namespace: ["platform"],
-    });
+    const hit = await search("429 rate limit errors", { root, namespace: ["platform"] });
     expect(hit).toBe(0);
     const lines = log.mock.calls.map((c) => String(c[0]));
     expect(lines.some((l) => l.includes("platform/rate-limits.md"))).toBe(true);

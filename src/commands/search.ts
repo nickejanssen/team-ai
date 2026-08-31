@@ -16,9 +16,6 @@ export interface SearchCommandOptions {
   k?: number;
   namespace?: string[];
   json?: boolean;
-  // Internal override so tests can isolate the SQLite file per temp dir. Not a
-  // documented CLI flag.
-  dbPath?: string;
 }
 
 function closeAdapter(adapter: RetrievalAdapter): void {
@@ -37,10 +34,7 @@ export async function run(query: string, opts: SearchCommandOptions): Promise<nu
   const k = opts.k ?? 8;
   const namespace = opts.namespace ?? [];
 
-  const adapter = createAdapter(
-    root,
-    opts.dbPath !== undefined ? { dbPath: opts.dbPath } : undefined,
-  );
+  const adapter = createAdapter(root);
 
   const searchOpts: SearchOpts = namespace.length > 0 ? { k, namespace } : { k };
 

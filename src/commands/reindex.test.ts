@@ -25,12 +25,13 @@ afterEach(() => {
 });
 
 describe("reindex", () => {
-  it("creates index.lock and reports index stats", async () => {
+  it("creates index.lock, writes the index under the instance dir, and reports stats", async () => {
     const dir = makeInstance(true);
-    const code = await run({ root: dir, dbPath: join(dir, "index.sqlite") });
+    const code = await run({ root: dir });
 
     expect(code).toBe(0);
     expect(existsSync(join(dir, "index.lock"))).toBe(true);
+    expect(existsSync(join(dir, ".team-ai", "index.sqlite"))).toBe(true);
 
     const printed = log.mock.calls.map((c) => String(c[0])).join("\n");
     expect(printed).toContain("wrote index.lock");
@@ -39,10 +40,10 @@ describe("reindex", () => {
 
   it("does not re-note index.lock when it already exists", async () => {
     const dir = makeInstance(true);
-    await run({ root: dir, dbPath: join(dir, "index.sqlite") });
+    await run({ root: dir });
     log.mockClear();
 
-    const code = await run({ root: dir, dbPath: join(dir, "index.sqlite") });
+    const code = await run({ root: dir });
     expect(code).toBe(0);
     const printed = log.mock.calls.map((c) => String(c[0])).join("\n");
     expect(printed).not.toContain("wrote index.lock");
@@ -50,7 +51,7 @@ describe("reindex", () => {
 
   it("returns 1 when the instance has no kb/ directory", async () => {
     const dir = makeInstance(false);
-    const code = await run({ root: dir, dbPath: join(dir, "index.sqlite") });
+    const code = await run({ root: dir });
 
     expect(code).toBe(1);
     const printed = error.mock.calls.map((c) => String(c[0])).join("\n");

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -17,7 +17,16 @@ describe("createAdapter", () => {
     const a = createAdapter(dir, { kbRoot: "src/kb/fixtures/kb" });
     const stats = await a.reindex();
     expect(stats.driver).toBe("lexical");
+
+    // End-to-end through the factory: reindex then search resolves hits.
+    const hits = await a.search("charter");
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+
     if ("close" in a && typeof a.close === "function") (a as { close: () => void }).close();
+
+    // The index defaults into the instance dir, never the process cwd.
+    expect(existsSync(join(dir, ".team-ai", "index.sqlite"))).toBe(true);
+    expect(existsSync(join(process.cwd(), ".team-ai"))).toBe(false);
   });
 
   it("returns the matching stub for a vector/graph driver", async () => {
