@@ -4,3 +4,7 @@ emitted/
 *.sqlite
 *.sqlite-*
 .DS_Store
+coverage/
+*.tsbuildinfo
+.tmp-dogfood/
+.tmp-test/
