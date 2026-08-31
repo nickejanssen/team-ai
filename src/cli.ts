@@ -6,7 +6,9 @@ import * as assembleManifest from "./commands/assemble-manifest.js";
 import * as checkAgnostic from "./commands/check-agnostic.js";
 import * as doctor from "./commands/doctor.js";
 import * as freshnessAudit from "./commands/freshness-audit.js";
+import * as attach from "./generator/attach.js";
 import * as init from "./generator/init.js";
+import * as spoke from "./generator/spoke.js";
 import * as reindex from "./commands/reindex.js";
 import * as runEvals from "./commands/run-evals.js";
 import * as search from "./commands/search.js";
@@ -171,6 +173,28 @@ export function buildProgram(): Command {
         );
     },
     run: init.run,
+  });
+
+  registerCommand(program, {
+    name: "spoke",
+    description: "Scaffold a thin spoke repo and check it against the spoke contract",
+    configure: (command) => {
+      command
+        .option("--dir <dir>", "target directory to generate into", ".")
+        .option("--force", "overwrite an existing spoke.yaml pre-check", false);
+    },
+    run: spoke.run,
+  });
+
+  registerCommand(program, {
+    name: "attach",
+    description: "Write a .team-ai.yaml so a repo can consume an existing instance (attach mode)",
+    configure: (command) => {
+      command
+        .option("--dir <dir>", "target directory to write into", ".")
+        .option("--force", "overwrite an existing .team-ai.yaml pre-check", false);
+    },
+    run: attach.run,
   });
 
   // `search` takes a positional argument, which the shared helper does not
