@@ -2,6 +2,7 @@ import { pathToFileURL } from "node:url";
 
 import { Command } from "commander";
 
+import * as assembleManifest from "./commands/assemble-manifest.js";
 import * as reindex from "./commands/reindex.js";
 import * as search from "./commands/search.js";
 import * as validateCitations from "./commands/validate-citations.js";
@@ -73,6 +74,17 @@ export function buildProgram(): Command {
       command.option("--root <dir>", "instance root directory containing kb/", ".");
     },
     run: reindex.run,
+  });
+
+  registerCommand(program, {
+    name: "assemble-manifest",
+    description: "Merge the instance manifest fragment and spoke configs into manifest.yaml",
+    configure: (command) => {
+      command
+        .option("--root <dir>", "instance root directory", ".")
+        .option("--check", "verify manifest.yaml is current without writing it", false);
+    },
+    run: assembleManifest.run,
   });
 
   // `search` takes a positional argument, which the shared helper does not
