@@ -1,7 +1,7 @@
 {
   "planPath": "docs/plans/2026-08-30-team-ai-framework.md",
   "note": "Native Task tools were unavailable in the authoring session; this file is the manual persistence fallback. Full Goal/Files/Acceptance/Verify/Steps for each task live in the plan .md under the matching heading. Execute with /superpowers-extended-cc:executing-plans docs/plans/2026-08-30-team-ai-framework.md",
-  "lastUpdated": "2026-08-31T01:59:31.181Z",
+  "lastUpdated": "2026-08-31T02:07:27.616Z",
   "tasks": [
     {
       "id": 0,
@@ -21,7 +21,7 @@
     {
       "id": 2,
       "subject": "Task 2: Community health files",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         0
       ],
@@ -30,7 +30,7 @@
     {
       "id": 3,
       "subject": "Task 3: Framework CI workflow",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         1
       ],
