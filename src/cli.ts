@@ -3,6 +3,8 @@ import { pathToFileURL } from "node:url";
 import { Command, Option } from "commander";
 
 import * as assembleManifest from "./commands/assemble-manifest.js";
+import * as checkAgnostic from "./commands/check-agnostic.js";
+import * as doctor from "./commands/doctor.js";
 import * as freshnessAudit from "./commands/freshness-audit.js";
 import * as reindex from "./commands/reindex.js";
 import * as runEvals from "./commands/run-evals.js";
@@ -125,6 +127,25 @@ export function buildProgram(): Command {
         .option("--json", "emit the EvalReport as JSON instead of a table", false);
     },
     run: runEvals.run,
+  });
+
+  registerCommand(program, {
+    name: "check-agnostic",
+    description: "Fail if shipped framework source contains a team's proper nouns",
+    configure: () => undefined,
+    run: checkAgnostic.run,
+  });
+
+  registerCommand(program, {
+    name: "doctor",
+    description: "Run environment and setup checks (--self for framework CI, else an instance)",
+    configure: (command) => {
+      command
+        .option("--root <dir>", "instance root directory to check", ".")
+        .option("--self", "run framework self-verification instead of an instance check", false)
+        .option("--strict", "treat not-built-yet and remaining items as failures", false);
+    },
+    run: doctor.run,
   });
 
   // `search` takes a positional argument, which the shared helper does not

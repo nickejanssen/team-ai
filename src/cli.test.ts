@@ -20,6 +20,8 @@ describe("buildProgram", () => {
     expect(names).toContain("search");
     expect(names).toContain("assemble-manifest");
     expect(names).toContain("freshness-audit");
+    expect(names).toContain("check-agnostic");
+    expect(names).toContain("doctor");
   });
 
   it("declares the search positional argument", () => {

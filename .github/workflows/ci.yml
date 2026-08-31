@@ -28,9 +28,8 @@ jobs:
           cache: "npm"
       - run: npm ci
       - run: npm run build
-      # PLACEHOLDER: Task 17 replaces the next line with
-      #   node dist/cli.js check-agnostic  &&  node dist/cli.js doctor --self
-      - run: npm run test
+      - run: node dist/cli.js check-agnostic
+      - run: node dist/cli.js doctor --self
   secret-scan:
     runs-on: ubuntu-latest
     steps:
