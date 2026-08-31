@@ -19,7 +19,8 @@ export type SchemaName =
   | "golden"
   | "namespace-preset"
   | "role"
-  | "skill-catalog";
+  | "skill-catalog"
+  | "questions";
 
 const ajv = addFormats(new Ajv2020({ allErrors: true, strict: true }));
 

@@ -68,11 +68,11 @@ describe("self checks", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("treats not-yet-built pieces as skipped passes", () => {
+  it("parses the shipped question bank and skips not-yet-built pieces", () => {
     const questions = checkQuestionsYaml(process.cwd());
     const templates = checkTemplatesDir(process.cwd());
     expect(questions.ok).toBe(true);
-    expect(questions.skipped).toBe(true);
+    expect(questions.skipped).toBeFalsy();
     expect(templates.ok).toBe(true);
     expect(templates.skipped).toBe(true);
   });

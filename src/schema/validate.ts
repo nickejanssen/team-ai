@@ -1,4 +1,5 @@
 import type { NamespacePreset, RoleArchetype, SkillCatalogEntry } from "../catalog/types.js";
+import type { QuestionBankFile } from "../interview/types.js";
 import { loadValidator, type SchemaName } from "./load.js";
 import type {
   AgentDef,
@@ -19,6 +20,7 @@ export interface SchemaTypeMap {
   "namespace-preset": NamespacePreset;
   role: RoleArchetype;
   "skill-catalog": SkillCatalogEntry;
+  questions: QuestionBankFile;
 }
 
 export type ValidateResult<T> = { ok: true; value: T } | { ok: false; errors: string[] };
