@@ -78,10 +78,17 @@ function sanitizeSystem(system: string): string {
 }
 
 // `authored` unless one of the first eight body lines carries a sync marker.
+// A named system ("edit in Notion") is the most specific signal and wins over
+// the generic "do not edit" / "> Source:" fallbacks even when it appears on a
+// later line — otherwise a doc that leads with "> Source:" is mislabelled
+// `synced:external` when it actually names its system two lines down.
 export function detectSyncedSource(body: string): string | null {
-  for (const line of body.split(/\r?\n/).slice(0, HEAD_LINES)) {
+  const head = body.split(/\r?\n/).slice(0, HEAD_LINES);
+  for (const line of head) {
     const editIn = line.match(/edit in (\w+)/i);
     if (editIn?.[1] !== undefined) return `synced:${sanitizeSystem(editIn[1])}`;
+  }
+  for (const line of head) {
     if (/do not edit/i.test(line)) return "synced:external";
     if (/^>\s*Source:/i.test(line)) return "synced:external";
   }
