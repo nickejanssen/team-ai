@@ -204,6 +204,11 @@ export function buildProgram(): Command {
         .option("--out <dir>", "directory to write the adoption plan into", ".")
         .option("--horizon-days <n>", "review-by horizon for backfilled front matter", "180")
         .option("--namespace-map <file>", "YAML file of folder: namespace overrides")
+        .option(
+          "--include-archived",
+          "also measure docs under archive/ and notion-export/ (skipped by default)",
+          false,
+        )
         .option("--interactive", "walk the written plan and record approvals into it", false)
         .option("--apply", "write the approved parts of the plan into the repo", false);
     },

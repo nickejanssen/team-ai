@@ -35,6 +35,19 @@ async function approve(planPath: string, paths: string[]): Promise<void> {
   writeFileSync(planPath, stringify(plan), "utf8");
 }
 
+// Resolve pending namespace decisions the way `team-ai adopt --interactive` would.
+async function decide(planPath: string, picks: Record<string, string>): Promise<void> {
+  const { parse, stringify } = await import("yaml");
+  const plan = parse(readFileSync(planPath, "utf8")) as {
+    namespace_map: { decisions: { folder: string; chosen: string | null }[] };
+  };
+  for (const decision of plan.namespace_map.decisions) {
+    const pick = picks[decision.folder];
+    if (pick !== undefined) decision.chosen = pick;
+  }
+  writeFileSync(planPath, stringify(plan), "utf8");
+}
+
 afterEach(() => {
   log.mockClear();
   error.mockClear();
@@ -45,6 +58,7 @@ describe("applyPlan", () => {
   it("backfills only the approved docs, leaves the rest untouched, and is idempotent", async () => {
     const { repo, planPath } = await stagedRepo();
     await approve(planPath, ["docs/architecture/a.md", "docs/notes/b.md"]);
+    await decide(planPath, { architecture: "platform", notes: "operating" });
 
     const first = await applyPlan(planPath, { root: repo });
     expect(first.applied.sort()).toEqual(["docs/architecture/a.md", "docs/notes/b.md"]);
@@ -53,7 +67,9 @@ describe("applyPlan", () => {
     for (const rel of ["docs/architecture/a.md", "docs/notes/b.md"]) {
       const content = readFileSync(join(repo, rel), "utf8");
       expect(content.startsWith("---\n")).toBe(true);
-      expect(validate("frontmatter", parseFrontmatter(content).data).ok).toBe(true);
+      const { data } = parseFrontmatter(content);
+      expect(validate("frontmatter", data).ok).toBe(true);
+      expect(data.namespace).not.toBe("__pending__");
     }
     // The un-approved third doc is unchanged.
     expect(readFileSync(join(repo, "docs/prd/c.md"), "utf8").startsWith("---\n")).toBe(false);
@@ -63,6 +79,25 @@ describe("applyPlan", () => {
     expect(second.skipped).toContain("docs/architecture/a.md");
     expect(second.skipped).toContain("docs/notes/b.md");
     expect(second.conflicts).toEqual([]);
+  });
+
+  it("refuses an approved backfill item whose namespace decision is still open", async () => {
+    const { repo, planPath } = await stagedRepo();
+    await approve(planPath, ["docs/prd/c.md"]);
+    // No `decide()` — prd/ is still `__pending__`.
+
+    const result = await applyPlan(planPath, { root: repo });
+    expect(result.applied).toEqual([]);
+    expect(result.skipped).toContain("docs/prd/c.md");
+    expect(readFileSync(join(repo, "docs/prd/c.md"), "utf8").startsWith("---\n")).toBe(false);
+
+    // Once the decision is made, the same plan applies cleanly.
+    await decide(planPath, { prd: "operating" });
+    const after = await applyPlan(planPath, { root: repo });
+    expect(after.applied).toEqual(["docs/prd/c.md"]);
+    const { data } = parseFrontmatter(readFileSync(join(repo, "docs/prd/c.md"), "utf8"));
+    expect(data.namespace).toBe("operating");
+    expect(data.id).toBe("operating.prd.c");
   });
 
   it("records namespace decisions into .team-ai-namespaces.yaml", async () => {

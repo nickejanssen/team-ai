@@ -13,9 +13,12 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import * as validateKb from "../commands/validate-kb.js";
 import { parseFrontmatter, serializeFrontmatter } from "../kb/frontmatter.js";
+import type { FrontMatter } from "../schema/types.js";
 import { validate } from "../schema/validate.js";
 import { applyFrontmatter } from "./backfill.js";
-import type { AdoptionPlan } from "./types.js";
+import { inferId } from "./infer.js";
+import { PENDING_NAMESPACE } from "./types.js";
+import type { AdoptionPlan, BackfillItem } from "./types.js";
 
 export interface ApplyPlanOptions {
   root: string;
@@ -40,14 +43,41 @@ function loadPlan(planPath: string): AdoptionPlan {
   return result.value;
 }
 
+// A backfill item's path is repo-relative (`docs/<folder>/...`); the namespace
+// decision is keyed by `<folder>`.
+function folderOf(itemPath: string): string {
+  const parts = itemPath.split("/");
+  return parts.length >= 3 ? (parts[1] ?? "") : "";
+}
+
+// The namespace to write, or `null` when the folder's decision is still open.
+function resolvedNamespace(plan: AdoptionPlan, item: BackfillItem): string | null {
+  if (item.namespace !== PENDING_NAMESPACE) return item.namespace;
+  const decision = plan.namespace_map.decisions.find((d) => d.folder === folderOf(item.path));
+  const chosen = decision?.chosen;
+  return typeof chosen === "string" && chosen.length > 0 ? chosen : null;
+}
+
+function frontmatterFor(item: BackfillItem, namespace: string): FrontMatter {
+  if (namespace === item.frontmatter.namespace) return item.frontmatter;
+  const relFromDocs = item.path.replace(/^(docs|kb)\//, "");
+  return { ...item.frontmatter, namespace, id: inferId(relFromDocs, namespace) };
+}
+
 function applyBackfill(plan: AdoptionPlan, root: string, out: ApplyPlanResult): void {
   for (const item of plan.backfill) {
     if (item.approved !== true) {
       out.skipped.push(item.path);
       continue;
     }
+    const namespace = resolvedNamespace(plan, item);
+    if (namespace === null) {
+      out.skipped.push(item.path);
+      console.log(`skipped ${item.path} — namespace decision not made`);
+      continue;
+    }
     const abs = join(root, item.path);
-    const result = applyFrontmatter(abs, item.frontmatter, {});
+    const result = applyFrontmatter(abs, frontmatterFor(item, namespace), {});
     if (result.ok) {
       out.applied.push(item.path);
     } else if (result.reason === "already has front matter") {

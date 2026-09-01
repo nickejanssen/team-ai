@@ -57,11 +57,23 @@ function sha256(path: string): string {
 }
 
 // The contract is "our runs never write into Arcwright", not "Arcwright is
-// globally pristine" — a parallel process on this machine may leave its own
-// untracked scratch dirs. So snapshot the porcelain status and assert our runs
-// leave it byte-for-byte unchanged.
+// globally frozen" — a parallel process on this machine edits it during the
+// suite. So the guard is: no porcelain entry that appears after a run (and was
+// not there before) may name a team-ai output artifact. Everything team-ai
+// adopt / init / preflight writes goes under a `--out` / `--dir` we control.
+const TEAM_AI_ARTIFACT = /adoption-plan|\.team-ai|team-profile\.yaml|index\.lock/;
+
 function arcwrightStatus(): string {
   return execFileSync("git", ["-C", ARCWRIGHT, "status", "--porcelain"], { encoding: "utf8" });
+}
+
+function arcwrightUntouched(before: string): void {
+  const beforeLines = new Set(before.split("\n"));
+  const leaked = arcwrightStatus()
+    .split("\n")
+    .filter((line) => line.trim().length > 0 && !beforeLines.has(line))
+    .filter((line) => TEAM_AI_ARTIFACT.test(line));
+  expect(leaked).toEqual([]);
 }
 
 let arcwrightBefore = "";
@@ -95,7 +107,7 @@ afterEach(() => {
   errorLog.mockClear();
   log.mockImplementation(() => undefined);
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
-  if (HAS_ARCWRIGHT) expect(arcwrightStatus()).toBe(arcwrightBefore);
+  if (HAS_ARCWRIGHT) arcwrightUntouched(arcwrightBefore);
 });
 
 describe("dogfood Run A — Arcwright (needs the real repo)", () => {
@@ -182,7 +194,7 @@ describe("dogfood Run A — Arcwright (needs the real repo)", () => {
       const out = tmp();
       const code = await adopt.run({ root: ARCWRIGHT, out, horizonDays: 180 });
       expect(code).toBe(0);
-      expect(arcwrightStatus()).toBe(arcwrightBefore);
+      arcwrightUntouched(arcwrightBefore);
 
       expect(readdirSync(out).sort()).toEqual(["adoption-plan.yaml", "docs"]);
       expect(readdirSync(join(out, "docs"))).toEqual(["adoption-plan.md"]);

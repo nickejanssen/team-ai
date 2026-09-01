@@ -30,6 +30,7 @@ import { renderTree } from "../generator/render.js";
 import { detectSyncedSource, inferFrontmatter } from "./infer.js";
 import { getGitAuthorsMap } from "./git-owner.js";
 import { proposeNamespaceMap } from "./namespaces.js";
+import { PENDING_NAMESPACE } from "./types.js";
 import type {
   AdoptionPlan,
   BackfillItem,
@@ -42,12 +43,23 @@ import { gapVsQualityBar } from "./gap.js";
 const DEFAULT_PRESET_SHAPE = ["operating", "platform", "patterns", "playbooks", "decisions"];
 const DOC_TEMPLATE = new URL("../../src/adopt/plan-doc.hbs", import.meta.url);
 
+// Path segments `team-ai adopt` never measures: version control, dependencies,
+// build output, and — unless `--include-archived` — archived or export-dump
+// docs, which are not held to the current standard.
+const NEVER_SCAN_SEGMENTS = new Set([".git", "node_modules", "dist"]);
+const ARCHIVED_SEGMENTS = new Set(["archive", "archived", "_archive", "notion-export"]);
+
+function hasSegment(relPosix: string, set: Set<string>): boolean {
+  return relPosix.split("/").some((segment) => set.has(segment.toLowerCase()));
+}
+
 export interface BuildAdoptionPlanOptions {
   root: string;
   out: string;
   horizonDays: number;
   namespaceMap?: Record<string, string>;
   today?: Date;
+  includeArchived?: boolean;
 }
 
 function isDir(target: string): boolean {
@@ -62,7 +74,12 @@ function toPosix(path: string): string {
   return path.split(/[\\/]/).join("/");
 }
 
-function topLevelFolders(docsRoot: string): string[] {
+function skipDir(relPosix: string, includeArchived: boolean): boolean {
+  if (hasSegment(relPosix, NEVER_SCAN_SEGMENTS)) return true;
+  return !includeArchived && hasSegment(relPosix, ARCHIVED_SEGMENTS);
+}
+
+function topLevelFolders(docsRoot: string, includeArchived: boolean): string[] {
   let entries: Dirent[];
   try {
     entries = readdirSync(docsRoot, { withFileTypes: true });
@@ -72,11 +89,16 @@ function topLevelFolders(docsRoot: string): string[] {
   return entries
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
+    .filter((name) => !skipDir(name, includeArchived))
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
-function markdownUnder(docsRoot: string): string[] {
+function markdownUnder(
+  docsRoot: string,
+  includeArchived: boolean,
+): { files: string[]; archivedSkipped: number } {
   const out: string[] = [];
+  let archivedSkipped = 0;
   const stack: string[] = [""];
   while (stack.length > 0) {
     const relDir = stack.pop();
@@ -89,11 +111,19 @@ function markdownUnder(docsRoot: string): string[] {
     }
     for (const entry of entries.sort((a, b) => (a.name < b.name ? -1 : 1))) {
       const rel = relDir.length > 0 ? `${relDir}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) stack.push(rel);
-      else if (entry.isFile() && entry.name.endsWith(".md")) out.push(toPosix(rel));
+      if (entry.isDirectory()) {
+        if (hasSegment(rel, NEVER_SCAN_SEGMENTS)) continue;
+        stack.push(rel);
+      } else if (entry.isFile() && entry.name.endsWith(".md")) {
+        if (!includeArchived && hasSegment(rel, ARCHIVED_SEGMENTS)) {
+          archivedSkipped += 1;
+          continue;
+        }
+        out.push(toPosix(rel));
+      }
     }
   }
-  return out.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return { files: out.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)), archivedSkipped };
 }
 
 function stubContext(root: string): Record<string, unknown> {
@@ -133,6 +163,11 @@ function renderDoc(plan: AdoptionPlan, assessment: string): string {
   const satisfied = plan.gap.filter((g) => g.satisfied).length;
   return Handlebars.create().compile(source, { noEscape: true })({
     ...plan,
+    backfill: plan.backfill.map((item) => ({
+      ...item,
+      namespaceLabel:
+        item.namespace === PENDING_NAMESPACE ? "**(pending decision)**" : `\`${item.namespace}\``,
+    })),
     assessment,
     gapSatisfied: satisfied,
     gapTotal: plan.gap.length,
@@ -155,6 +190,7 @@ export function writeAdoptionPlan(plan: AdoptionPlan, out: string, assessment = 
 export async function buildAdoptionPlan(opts: BuildAdoptionPlanOptions): Promise<AdoptionPlan> {
   const { root, out, horizonDays } = opts;
   const today = opts.today ?? new Date();
+  const includeArchived = opts.includeArchived === true;
 
   const report = await scanPreflight(root);
 
@@ -167,7 +203,7 @@ export async function buildAdoptionPlan(opts: BuildAdoptionPlanOptions): Promise
     throw new Error(`team-ai adopt: no docs/ or kb/ directory under ${root}`);
   }
 
-  const folders = topLevelFolders(docsRoot);
+  const folders = topLevelFolders(docsRoot, includeArchived);
   const proposal = proposeNamespaceMap(folders, DEFAULT_PRESET_SHAPE);
 
   const matchedByFolder = new Map<string, string>();
@@ -186,7 +222,15 @@ export async function buildAdoptionPlan(opts: BuildAdoptionPlanOptions): Promise
     .filter((u) => decisionFolders.has(u.folder))
     .map((u) => ({ folder: u.folder, candidates: u.candidates, chosen: null }));
 
-  const namespaceForFolder = (folder: string): string => matchedByFolder.get(folder) ?? "unmapped";
+  // A folder with no preset match and no override carries PENDING_NAMESPACE
+  // until `--interactive` records a `chosen` value; root-level docs (no folder)
+  // stay `unmapped`.
+  const namespaceForFolder = (folder: string): string => {
+    const mapped = matchedByFolder.get(folder);
+    if (mapped !== undefined) return mapped;
+    if (folder.length > 0 && decisionFolders.has(folder)) return PENDING_NAMESPACE;
+    return "unmapped";
+  };
 
   const backfill: BackfillItem[] = [];
   const relabels: RelabelItem[] = [];
@@ -194,7 +238,8 @@ export async function buildAdoptionPlan(opts: BuildAdoptionPlanOptions): Promise
   // One git traversal for the whole docs tree, not one subprocess per file.
   const authorsByPath = getGitAuthorsMap(root, toPosix(relative(root, docsRoot)));
 
-  for (const relFromDocs of markdownUnder(docsRoot)) {
+  const { files: markdownFiles, archivedSkipped } = markdownUnder(docsRoot, includeArchived);
+  for (const relFromDocs of markdownFiles) {
     const abs = join(docsRoot, relFromDocs);
     const relFromRoot = toPosix(relative(root, abs));
     const folder = relFromDocs.includes("/") ? (relFromDocs.split("/")[0] ?? "") : "";
@@ -262,6 +307,7 @@ export async function buildAdoptionPlan(opts: BuildAdoptionPlanOptions): Promise
     relabels,
     gap: gapVsQualityBar(root),
     collisions: await detectCollisions(root),
+    archived_skipped: archivedSkipped,
   };
 
   writeAdoptionPlan(plan, out, report.assessment);

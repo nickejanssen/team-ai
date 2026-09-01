@@ -6,6 +6,10 @@
 
 import type { FrontMatter } from "../schema/types.js";
 
+// The namespace a backfill item carries until its folder's namespace decision
+// is made. `team-ai adopt --apply` refuses to write a doc that still has it.
+export const PENDING_NAMESPACE = "__pending__";
+
 export interface NamespaceMatch {
   folder: string;
   namespace: string;
@@ -53,4 +57,5 @@ export interface AdoptionPlan {
   relabels: RelabelItem[];
   gap: GapEntry[];
   collisions: string[];
+  archived_skipped: number;
 }

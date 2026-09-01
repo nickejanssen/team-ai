@@ -21,6 +21,7 @@ export interface AdoptCommandOptions {
   namespaceMap?: string;
   interactive?: boolean;
   apply?: boolean;
+  includeArchived?: boolean;
 }
 
 const PLAN_FILE = "adoption-plan.yaml";
@@ -73,6 +74,7 @@ export async function run(opts: AdoptCommandOptions): Promise<number> {
     root,
     out,
     horizonDays: horizon(opts.horizonDays),
+    includeArchived: opts.includeArchived === true,
     ...(namespaceMap !== undefined ? { namespaceMap } : {}),
   });
 
@@ -80,6 +82,9 @@ export async function run(opts: AdoptCommandOptions): Promise<number> {
   console.log(
     `${plan.backfill.length} backfill items, ${plan.namespace_map.decisions.length} ` +
       `namespace decisions, gap: ${satisfied}/17 satisfied, ${plan.collisions.length} collisions`,
+  );
+  console.log(
+    `skipped ${plan.archived_skipped} archived/generated docs (--include-archived to include)`,
   );
   console.log(
     "review docs/adoption-plan.md, then `team-ai adopt --interactive` and `team-ai adopt --apply`",

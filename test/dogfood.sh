@@ -24,7 +24,17 @@ PARTNER_ANSWERS="test/fixtures/answers/dogfood-partner-solutions.yaml"
 
 fail() { echo "DOGFOOD FAIL: $*" >&2; exit 1; }
 have_arcwright() { [ -f "$ARCWRIGHT/AGENTS.md" ]; }
-arc_status() { git -C "$ARCWRIGHT" status --porcelain; }
+
+# The guarantee is "team-ai never writes into the measured repo", not "the repo
+# is frozen" — a parallel process on the machine may edit Arcwright mid-run. So
+# assert no team-ai output artifact shows up in its git status.
+assert_arcwright_untouched() {
+  if git -C "$ARCWRIGHT" status --porcelain \
+      | grep -Eq 'adoption-plan|\.team-ai|team-profile\.yaml|index\.lock'; then
+    git -C "$ARCWRIGHT" status --porcelain | grep -E 'adoption-plan|\.team-ai|team-profile\.yaml|index\.lock' >&2
+    fail "team-ai wrote an artifact into Arcwright"
+  fi
+}
 
 rm -rf "$WORK"
 mkdir -p "$WORK"
@@ -43,8 +53,6 @@ six_checks() {
 }
 
 if have_arcwright; then
-  ARC_BEFORE="$(arc_status)"
-
   echo "== Run A: team-ai init (Arcwright preflight) =="
   $CLI init --dir "$WORK/arcwright" --answers "$ARC_ANSWERS" \
     --preflight-target "$ARCWRIGHT" --on-conflict adopt-existing | tee "$WORK/runA-init.log"
@@ -89,9 +97,10 @@ if have_arcwright; then
     if(p.backfill.length===0) throw new Error('no backfill');
     if(p.namespace_map.decisions.length===0) throw new Error('no namespace decisions');
   " || fail "adoption plan shape wrong"
+  grep -q "archived/generated docs" "$WORK/runA-adopt.log" || fail "Run A-adopt missing archived-skip line"
 
-  [ "$(arc_status)" = "$ARC_BEFORE" ] || fail "Arcwright git status changed during the run"
-  echo "Arcwright git status unchanged."
+  assert_arcwright_untouched
+  echo "Arcwright carries no team-ai artifacts."
 else
   echo "== Arcwright repo not found at $ARCWRIGHT — skipping Run A / A-adopt =="
 fi

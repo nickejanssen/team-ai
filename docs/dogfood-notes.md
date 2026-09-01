@@ -137,18 +137,24 @@ Command: `adopt.run({ root: "…/arcwright", out: ".tmp-dogfood/arcwright-adopt"
 ### What worked
 
 - Writes exactly `adoption-plan.yaml` + `docs/adoption-plan.md` and nothing
-  else. The Arcwright working tree is **byte-for-byte unchanged**
-  (`git -C …/arcwright status --porcelain` identical before and after every
-  run).
+  else. **team-ai wrote no artifact into the Arcwright tree** — `adopt` only ever
+  writes under `--out` (`.tmp-dogfood/arcwright-adopt`). (An unrelated parallel
+  process on the machine edited `playtests/…` in Arcwright during the session;
+  none of it produced by a `team-ai` command. The guard is "no `adoption-plan`
+  / `.team-ai` / `team-profile.yaml` / `index.lock` entry appears in Arcwright's
+  git status", not "the repo is frozen".)
 - `adoption-plan.yaml` is schema-valid (`validate("adoption-plan", …).ok`).
 - Quality-bar gap table: **17 rows, 7 satisfied** (q1, q2, q5, q6, q13, q15,
   q17).
-- Namespace decisions: **13 folders** with no preset match need a human pick —
-  `agents`, `architecture`, `archive`, `conventions`, `design`, `gdd`, `prd`,
-  `product`, `roadmap`, `skills`, `specs`, `story-bibles`, `superpowers`. Only
-  `decisions/` preset-matched.
-- Front-matter backfill: **705 items**. `docs/architecture/*` (19 files)
-  correctly labelled `source: synced:notion` (see fix below).
+- Namespace decisions (after the archive-skip fix): **12 folders** with no
+  preset match need a human pick — `agents`, `architecture`, `conventions`,
+  `design`, `gdd`, `prd`, `product`, `roadmap`, `skills`, `specs`,
+  `story-bibles`, `superpowers`. Only `decisions/` preset-matched. (Was 13
+  before the fix — `archive/` is no longer measured.)
+- Front-matter backfill: **470 items** (was 705; **235 archived/generated docs
+  skipped**). `docs/architecture/*` (19 files) correctly labelled
+  `source: synced:notion`. Undecided-folder rows carry `namespace: __pending__`
+  and render as **(pending decision)**.
 - 3 template collisions: `.github/workflows/evals.yml`, `.gitignore`,
   `README.md`.
 
@@ -159,10 +165,11 @@ Command: `adopt.run({ root: "…/arcwright", out: ".tmp-dogfood/arcwright-adopt"
 
 - **Repo measured:** `C:/Users/nicke/OneDrive/Desktop/arcwright`
 - **Preflight assessment:** extend
-- **Front-matter backfill items:** 705
-- **Namespace decisions needing a human pick:** 13
+- **Front-matter backfill items:** 470
+- **Namespace decisions needing a human pick:** 12
 - **Quality-bar gap:** 7/17 satisfied
 - **Template collisions:** 3
+- **Archived / generated docs skipped:** 235 (`--include-archived` to measure them too)
 
 ## Namespace map
 ### Matched
@@ -171,12 +178,12 @@ Command: `adopt.run({ root: "…/arcwright", out: ".tmp-dogfood/arcwright-adopt"
 - `prd/` — candidates: `patterns` `platform` `operating` `custom`
 - `story-bibles/` — candidates: `playbooks` `decisions` `operating` `custom`
 - `conventions/` — candidates: `decisions` `operating` `patterns` `custom`
-  … (10 more)
+  … (9 more)
 
 ## Front-matter backfill
-- `docs/agents/planner.md` → id `unmapped.agents.planner`, namespace `unmapped`, source `authored`
-- `docs/architecture/01-overview.md` → id `unmapped.architecture.01-overview`, namespace `unmapped`, source `synced:notion`
-  … (703 more)
+- `docs/agents/planner.md` → id `pending.agents.planner`, namespace **(pending decision)**, source `authored`
+- `docs/architecture/01-overview.md` → id `pending.architecture.01-overview`, namespace **(pending decision)**, source `synced:notion`
+  … (468 more)
 
 ## Quality-bar gap
 - **q1** — satisfied: markdown docs in docs/ · closes with: add front matter + `team-ai reindex`
@@ -208,26 +215,29 @@ Command: `adopt.run({ root: "…/arcwright", out: ".tmp-dogfood/arcwright-adopt"
    the generic markers. **FIXED in 97c1141.** 19 files now resolve to
    `synced:notion`.
 
-3. **Every backfill row says `namespace: unmapped`.** — AWKWARD. Because all of
+3. **Every backfill row said `namespace: unmapped`.** — AWKWARD. Because all of
    Arcwright's folders are undecided at plan-build time (only `decisions/`
-   matched), `inferId` produces `unmapped.architecture.01-overview` etc. and the
-   doc shows `namespace unmapped` for all 705 rows. It reads as if the tool has
-   no idea where anything goes; it actually means "pending your pick in
-   `team-ai adopt --interactive`". **Won't fix now** — cosmetic; `--interactive`
-   then `--apply` resolve the real namespaces correctly (covered by
-   `src/adopt/apply.test.ts`). Recommend the render say `(pending decision)` for
-   folders that are in the decisions list.
+   matched), the doc showed `namespace unmapped` for all 705 rows — it read as
+   if the tool had no idea where anything goes, when it actually meant "pending
+   your pick in `team-ai adopt --interactive`". Undecided-folder backfill items
+   now carry the explicit `__pending__` namespace, the plan doc renders it as
+   **(pending decision)**, and `team-ai adopt --apply` refuses such an item —
+   `skipped <path> — namespace decision not made` — so nothing is ever written
+   with a placeholder namespace. `--interactive` records the folder's `chosen`
+   value; `--apply` then resolves it (re-inferring the doc id) and writes.
+   **FIXED** in `fix(adopt): skip archived exports; clearer pending-decision labels`.
 
-4. **`docs/archive/**` is measured in full.** — AWKWARD. 232 of the 705 backfill
-   items are under `docs/archive/` — a raw Notion export dump and archived
-   Nightcap story bibles — and `archive/` shows up as its own namespace
+4. **`docs/archive/**` was measured in full.** — AWKWARD. 235 of the 705 backfill
+   items were under `docs/archive/` — a raw Notion export dump and archived
+   Nightcap story bibles — and `archive/` showed up as its own namespace
    decision. Arcwright's `AGENTS.md` explicitly says "Do not read or compare
-   archived exports by default. That wastes AI credits." Measuring 232
-   non-canonical fragments roughly doubles the plan. **Won't fix here** — whether
-   `team-ai adopt` should skip `docs/archive/**` by default (or gate it behind
-   `--include-archive`) is a product-behaviour decision for the framework owner,
-   not a clear bug, and CLAUDE.md says not to decide product scope unilaterally.
-   Recommend it be decided.
+   archived exports by default. That wastes AI credits." `buildAdoptionPlan` now
+   skips any doc whose path has a segment `archive` / `archived` / `_archive` /
+   `notion-export` (plus `.git` / `node_modules` / `dist`), reports the count
+   (`skipped 235 archived/generated docs (--include-archived to include)`), and
+   takes a `--include-archived` flag to turn the skip off. Arcwright's plan drops
+   from **705 → 470 backfill items** and **13 → 12 namespace decisions**.
+   **FIXED** in `fix(adopt): skip archived exports; clearer pending-decision labels`.
 
 ---
 
@@ -277,13 +287,12 @@ Profile: `generic-partner-facing` preset, team size **1–3**, surfaces
   `test/` is not in the scanned set, and `src/generator/dogfood.test.ts` is a
   `*.test.ts` (excluded). `test/` is also outside `package.json` `files`, so
   nothing team-specific ships.
-- **Arcwright stayed clean.** `git -C …/arcwright status --porcelain` was empty
-  before the task and after every `preflight` / `adopt` run — those commands
-  only read. During the session the repo did accumulate untracked
-  `.tmp-chrome-playtest*/` / `.tmp-edge-playtest/` directories from a *parallel*
-  process on the machine (a browser playtest harness), unrelated to any
-  `team-ai` command. The dogfood test asserts our runs leave the porcelain
-  status byte-for-byte unchanged rather than requiring it to be globally empty.
+- **team-ai wrote nothing into Arcwright.** `preflight` and `adopt` only read
+  `--root`; every artifact goes under `--out` / `--dir`. During the session an
+  unrelated parallel process on the machine edited Arcwright (`playtests/…`,
+  untracked `.tmp-chrome-playtest*/` / `.tmp-edge-playtest/`), so the guard is
+  "no `adoption-plan` / `.team-ai` / `team-profile.yaml` / `index.lock` entry
+  appears in Arcwright's git status", not "the repo is frozen".
 - Both `.tmp-dogfood/` trees were deleted after verification.
 
 ### Fix commits
@@ -293,3 +302,4 @@ Profile: `generic-partner-facing` preset, team size **1–3**, surfaces
 | `71da247` | `team-ai adopt` owner inference: one `git log` pass, not one per file (perf) |
 | `97c1141` | `detectSyncedSource` prefers a named system over a generic `> Source:` line |
 | `878b2c1` | agent-plan namespace + coexistence-note wording made honest |
+| `fix(adopt): skip archived exports…` | `adopt` skips archived/generated docs (`--include-archived` to opt in); undecided-folder backfill carries `__pending__` and `--apply` refuses it |

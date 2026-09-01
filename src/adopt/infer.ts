@@ -30,7 +30,7 @@ function pathSegments(relPath: string): string[] {
     .filter((segment) => segment.length > 0);
 }
 
-function inferId(relPath: string, namespace: string): string {
+export function inferId(relPath: string, namespace: string): string {
   const first = slug(namespace).replace(/-/g, "");
   const parts = [first, ...pathSegments(relPath).map((segment) => slug(segment))].filter(
     (part) => part.length > 0,

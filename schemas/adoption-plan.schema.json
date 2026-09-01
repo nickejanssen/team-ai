@@ -12,7 +12,8 @@
     "backfill",
     "relabels",
     "gap",
-    "collisions"
+    "collisions",
+    "archived_skipped"
   ],
   "properties": {
     "generated_by": { "type": "string" },
@@ -93,6 +94,7 @@
         }
       }
     },
-    "collisions": { "type": "array", "items": { "type": "string" } }
+    "collisions": { "type": "array", "items": { "type": "string" } },
+    "archived_skipped": { "type": "integer", "minimum": 0 }
   }
 }
