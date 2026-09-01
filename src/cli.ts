@@ -2,6 +2,7 @@ import { pathToFileURL } from "node:url";
 
 import { Command, Option } from "commander";
 
+import * as adopt from "./commands/adopt.js";
 import * as assembleManifest from "./commands/assemble-manifest.js";
 import * as checkAgnostic from "./commands/check-agnostic.js";
 import * as doctor from "./commands/doctor.js";
@@ -177,6 +178,22 @@ export function buildProgram(): Command {
         );
     },
     run: init.run,
+  });
+
+  registerCommand(program, {
+    name: "adopt",
+    description:
+      "Measure an existing repo against the framework standard and generate a deterministic adoption plan",
+    configure: (command) => {
+      command
+        .option("--root <dir>", "existing repo root to measure", ".")
+        .option("--out <dir>", "directory to write the adoption plan into", ".")
+        .option("--horizon-days <n>", "review-by horizon for backfilled front matter", "180")
+        .option("--namespace-map <file>", "YAML file of folder: namespace overrides")
+        .option("--interactive", "walk the written plan and record approvals into it", false)
+        .option("--apply", "write the approved parts of the plan into the repo", false);
+    },
+    run: adopt.run,
   });
 
   registerCommand(program, {

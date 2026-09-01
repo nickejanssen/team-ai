@@ -1,3 +1,4 @@
+import type { AdoptionPlan } from "../adopt/types.js";
 import type { NamespacePreset, RoleArchetype, SkillCatalogEntry } from "../catalog/types.js";
 import type { QuestionBankFile } from "../interview/types.js";
 import { loadValidator, type SchemaName } from "./load.js";
@@ -21,6 +22,7 @@ export interface SchemaTypeMap {
   role: RoleArchetype;
   "skill-catalog": SkillCatalogEntry;
   questions: QuestionBankFile;
+  "adoption-plan": AdoptionPlan;
 }
 
 export type ValidateResult<T> = { ok: true; value: T } | { ok: false; errors: string[] };

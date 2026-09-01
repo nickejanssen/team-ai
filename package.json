@@ -24,7 +24,8 @@
     "skills",
     "src/interview/questions.yaml",
     "src/interview/gates",
-    "src/interview/doc-templates"
+    "src/interview/doc-templates",
+    "src/adopt/plan-doc.hbs"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

@@ -20,7 +20,8 @@ export type SchemaName =
   | "namespace-preset"
   | "role"
   | "skill-catalog"
-  | "questions";
+  | "questions"
+  | "adoption-plan";
 
 const ajv = addFormats(new Ajv2020({ allErrors: true, strict: true }));
 
