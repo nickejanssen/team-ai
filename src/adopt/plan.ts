@@ -28,7 +28,7 @@ import { packageVersion } from "../version.js";
 import { TEMPLATES_INSTANCE } from "../generator/entity-files.js";
 import { renderTree } from "../generator/render.js";
 import { detectSyncedSource, inferFrontmatter } from "./infer.js";
-import { getGitAuthors } from "./git-owner.js";
+import { getGitAuthorsMap } from "./git-owner.js";
 import { proposeNamespaceMap } from "./namespaces.js";
 import type {
   AdoptionPlan,
@@ -191,6 +191,9 @@ export async function buildAdoptionPlan(opts: BuildAdoptionPlanOptions): Promise
   const backfill: BackfillItem[] = [];
   const relabels: RelabelItem[] = [];
 
+  // One git traversal for the whole docs tree, not one subprocess per file.
+  const authorsByPath = getGitAuthorsMap(root, toPosix(relative(root, docsRoot)));
+
   for (const relFromDocs of markdownUnder(docsRoot)) {
     const abs = join(docsRoot, relFromDocs);
     const relFromRoot = toPosix(relative(root, abs));
@@ -204,7 +207,7 @@ export async function buildAdoptionPlan(opts: BuildAdoptionPlanOptions): Promise
         relPath: relFromDocs,
         body: raw,
         namespace,
-        gitAuthors: getGitAuthors(abs, root),
+        gitAuthors: authorsByPath.get(relFromRoot) ?? [],
         horizonDays,
         today,
       });
@@ -225,7 +228,7 @@ export async function buildAdoptionPlan(opts: BuildAdoptionPlanOptions): Promise
         relPath: relFromDocs,
         body,
         namespace,
-        gitAuthors: getGitAuthors(abs, root),
+        gitAuthors: authorsByPath.get(relFromRoot) ?? [],
         horizonDays,
         today,
       });
