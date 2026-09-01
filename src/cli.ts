@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { Command, Option } from "commander";
 
 import * as adopt from "./commands/adopt.js";
+import { loadAnswerFile } from "./generator/init-answers.js";
 import * as assembleManifest from "./commands/assemble-manifest.js";
 import * as checkAgnostic from "./commands/check-agnostic.js";
 import * as doctor from "./commands/doctor.js";
@@ -32,6 +33,10 @@ interface CommandRegistration<Options> {
   configure: (command: Command) => void;
   run: (opts: Options) => Promise<number>;
 }
+
+// `--answers` arrives as a file path on the CLI; `init.run` wants the resolved
+// puller. Everything else maps straight through.
+type InitCliOptions = Omit<init.InitOptions, "answers" | "output"> & { answers?: string };
 
 // Commander option collector for a repeatable, comma-splittable `--namespace`.
 function collectNamespace(value: string, previous: string[]): string[] {
@@ -156,7 +161,7 @@ export function buildProgram(): Command {
     run: doctor.run,
   });
 
-  registerCommand(program, {
+  registerCommand<InitCliOptions>(program, {
     name: "init",
     description: "Run the interview and generate an instance without overwriting human work",
     configure: (command) => {
@@ -164,6 +169,10 @@ export function buildProgram(): Command {
         .option("--dir <dir>", "target directory to generate into", ".")
         .option("--dry-run", "classify what would be written; write nothing", false)
         .option("--resume", "resume a saved interview instead of starting fresh", false)
+        .option(
+          "--answers <file>",
+          "ordered YAML/JSON list of answer strings for a non-interactive run",
+        )
         .addOption(
           new Option(
             "--on-conflict <mode>",
@@ -177,7 +186,12 @@ export function buildProgram(): Command {
           ).hideHelp(),
         );
     },
-    run: init.run,
+    run: (opts: InitCliOptions): Promise<number> => {
+      const { answers, ...rest } = opts;
+      const initOpts: init.InitOptions = { ...rest };
+      if (typeof answers === "string") initOpts.answers = loadAnswerFile(answers);
+      return init.run(initOpts);
+    },
   });
 
   registerCommand(program, {
