@@ -9,9 +9,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2026-08-30
 
+First tagged release. The deterministic layer and the interview are complete and
+tested (~520 tests). Anything needing a running service or a second retrieval
+driver ships as an honest stub — see `docs/definition-of-done.md` and the
+"Known limitations" section of `README.md`.
+
 ### Added
 
-- Initial framework: guided interview, generator, deterministic scripts, lexical retrieval adapter, catalogs, agent/skill/persona templates, eval harness, optional local stdio MCP server template, and the deterministic `team-ai adopt` flow for existing repos.
+- **Guided interview.** One question bank (`src/interview/questions.yaml`,
+  ~25 questions, Acts 0–5, three confirmation gates) driven by a deterministic
+  engine. Runs as a CLI (`team-ai init`) or as a Claude skill
+  (`skills/scaffold-interview/`). Preflight scans for existing AI infrastructure
+  and steers toward extend, coexist, or stand down. Answers persist to
+  `team-profile.yaml` for `resume`, `review`, and `upgrade`.
+- **Non-destructive generator.** Renders an instance, spoke, attach config, or
+  MCP-server template from the team profile and catalog presets. Reconciliation
+  diffs template output against hand-edited files and never clobbers them,
+  writing `*.team-ai-new` siblings instead.
+- **`team-ai adopt`.** Deterministic measurement of an existing repo against the
+  framework standard: front-matter backfill plan, namespace map, quality-bar gap
+  table, template collisions. Writes only `adoption-plan.yaml` and
+  `docs/adoption-plan.md` under `--out`; never writes into the measured repo.
+- **18 CLI commands.** 10 deterministic scripts that call no model
+  (`validate-kb`, `validate-citations`, `validate-spoke`, `reindex`,
+  `assemble-manifest`, `freshness-audit`, `run-evals`, `check-agnostic`,
+  `doctor`, `search`) plus 8 interview/generator commands (`init`, `adopt`,
+  `spoke`, `attach`, `resume`, `review`, `upgrade`, `emit`).
+- **Lexical retrieval.** SQLite FTS5 ranked keyword search behind a
+  `RetrievalAdapter` interface. The `vector-embedded`, `vector-pgvector`,
+  `vector-hosted`, `graph`, and `hybrid` drivers are real classes whose methods
+  throw `NotImplementedError` pointing at the phase-8 index checkpoint.
+- **Catalogs.** Four namespace presets (`engineering`, `generic`,
+  `generic-partner-facing`, `support`) plus role, persona, and skill catalogs,
+  resolved toolkit → org catalog → instance. Custom entries generate a TODO stub,
+  never a guess.
+- **Agent / skill / persona templates and emitters.** Neutral entity definitions
+  in `templates/instance/`; `team-ai emit` targets claude-code, mcp-only, or
+  generic surfaces from the same profile.
+- **Eval harness.** Replays a golden set for hit rate, routing accuracy, refusal
+  behaviour, per-question tier ceiling, and cost per answer, gated against
+  `DEFAULT_GATES`. One EXAMPLE golden file ships and is skipped by `run-evals`.
+- **Optional local MCP server template** (`templates/mcp-server/`) — a generated
+  stdio server, off by default. No hosted or remote server, no auth, no
+  deployment.
+- **JSON schemas** for every artifact (agent, role, spoke, manifest, golden,
+  frontmatter, questions, team-profile, namespace-preset, skill-catalog,
+  adoption-plan) with a shared loader and validator.
+- **Repo scaffolding**: ESLint flat config, Prettier, lefthook, commitlint,
+  reusable GitHub Actions workflows (`ci.yml` plus `validate-kb`,
+  `validate-spoke`, `evals` reusable workflows), `CONTRIBUTING.md`,
+  `SECURITY.md`, `CODEOWNERS`, Apache-2.0 `LICENSE`.
+- **`docs/quality-bar.md`** — the 17 questions the framework is judged against,
+  each with the answer the architecture gives and the files that enforce it.
+- **Dogfood** (`docs/dogfood-notes.md`) — three runs of the framework against
+  itself and the five bugs they fixed.
 
 [Unreleased]: https://github.com/nickejanssen/team-ai/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/nickejanssen/team-ai/releases/tag/v0.1.0
