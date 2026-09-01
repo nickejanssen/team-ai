@@ -21,6 +21,7 @@ import type { AnswerRecord, Engine } from "./engine.js";
 import {
   CORE_SKILLS,
   collectDeferred,
+  domainNamespace,
   evalNamespaceCount,
   formatAnswer,
   loadCatalog,
@@ -146,8 +147,9 @@ function agentPlanContext(engine: Engine, created: string): Record<string, unkno
   const catalog = loadCatalog();
 
   const domains = parseDomains(eff["agents.domains"]);
+  const domainNs = domainNamespace(catalog, eff["kb.namespaces"]);
   const domainList = bullets(
-    domains.map((d) => `\`${slug(d)}-sme\` — ns: ${d}, tier small, hops 0`),
+    domains.map((d) => `\`${slug(d)}-sme\` — ns: ${domainNs}, tier small, hops 0`),
     "No domains were named yet. Add them before the first reindex.",
   );
 

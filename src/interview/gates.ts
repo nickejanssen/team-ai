@@ -169,14 +169,28 @@ export function evalNamespaceCount(
   return domains > 0 ? domains : 3;
 }
 
+// The namespace every domain subagent is scoped to. Matches the generator:
+// `src/generator/entity-files.ts` writes `kb_namespaces: [<preset first level>]`
+// for each domain SME, so the plan renders must report that same namespace, not
+// the free-text domain label.
+export function domainNamespace(catalog: ResolvedCatalog | null, nsAnswer: unknown): string {
+  if (catalog && typeof nsAnswer === "string") {
+    const preset = catalog.namespaces.get(nsAnswer);
+    const first = preset?.value.second_level[0];
+    if (typeof first === "string" && first.length > 0) return first;
+  }
+  return "operating";
+}
+
 function renderGate3(engine: Engine): string {
   const eff = engine.effectiveAnswers();
   const catalog = loadCatalog();
 
   const domains = parseDomains(eff["agents.domains"]);
+  const ns = domainNamespace(catalog, eff["kb.namespaces"]);
   const domainBlock =
     domains.length > 0
-      ? domains.map((d) => `  ${slug(d)}-sme   ns: ${d}   small   hops 0`).join("\n")
+      ? domains.map((d) => `  ${slug(d)}-sme   ns: ${ns}   small   hops 0`).join("\n")
       : "  (none named yet — add before the first reindex)";
 
   const roles = asArray(eff["agents.roles"]);

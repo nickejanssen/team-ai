@@ -80,7 +80,7 @@ describe("renderGate", () => {
     expect(out).toContain("AGENT PLAN");
     expect(out).toContain("ROUTER");
     expect(out).toContain("sme  tier: none → small on ambiguity  refuses + logs a gap");
-    expect(out).toContain("payments-sme   ns: payments   small   hops 0");
+    expect(out).toContain("payments-sme   ns: operating   small   hops 0");
     expect(out).toContain("core: kb-answer, kb-contribute, audit-summary, sme-route");
     expect(out).toContain("reindex, validate-kb, validate-citations");
     expect(out).toMatch(/20 golden questions stubbed across \d+ namespaces/);

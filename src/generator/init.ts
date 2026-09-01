@@ -200,11 +200,15 @@ export async function run(opts: InitOptions): Promise<number> {
     const adopted = [report.existingAssets.agentConfigFile, report.existingAssets.routerAgent]
       .filter((v): v is string => v !== undefined)
       .join(", ");
+    const routerClause =
+      report.existingAssets.routerAgent !== undefined
+        ? ` The existing router (${report.existingAssets.routerAgent}) remains authoritative; team-ai did not generate a second one.`
+        : "";
     appendFileSync(
       join(renderDir, "docs/architecture.md"),
       `\n\n## Coexistence boundary\n\nteam-ai runs in extend mode. Adopted (kept as-is): ${adopted}. ` +
-        "team-ai added only the deterministic layer (schemas, scripts, index, gap log). " +
-        "The existing router remains authoritative.\n",
+        "team-ai added only the deterministic layer (schemas, scripts, index, gap log)." +
+        `${routerClause}\n`,
       "utf8",
     );
   }
