@@ -1,7 +1,7 @@
 {
   "planPath": "docs/plans/2026-08-30-team-ai-framework.md",
   "note": "Native Task tools were unavailable in the authoring session; this file is the manual persistence fallback. Full Goal/Files/Acceptance/Verify/Steps for each task live in the plan .md under the matching heading. Execute with /superpowers-extended-cc:executing-plans docs/plans/2026-08-30-team-ai-framework.md",
-  "lastUpdated": "2026-08-31T22:11:42.966Z",
+  "lastUpdated": "2026-09-01T11:54:54.112Z",
   "tasks": [
     {
       "id": 0,
@@ -412,7 +412,7 @@
     {
       "id": 41,
       "subject": "Task 41: Front-matter inference and backfill transform",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         5,
         4
@@ -422,7 +422,7 @@
     {
       "id": 42,
       "subject": "Task 42: Namespace mapping candidate matcher",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         19
       ],
@@ -431,7 +431,7 @@
     {
       "id": 43,
       "subject": "Task 43: team-ai adopt - adoption plan generation",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         41,
         42,
@@ -445,7 +445,7 @@
     {
       "id": 44,
       "subject": "Task 44: team-ai adopt --interactive and --apply",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         43
       ],
