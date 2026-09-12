@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-12
+
+### Changed
+
+- **`team-ai adopt` anchors `review_by` on last git edit, not on "today".**
+  Backfilling front matter for a pre-existing doc previously assigned every
+  doc a fresh `today + horizonDays` review date, so long-neglected content
+  read as freshly reviewed. `review_by` now anchors on the doc's actual last
+  git commit date when one is known (one additional single-pass `git log`
+  traversal, same shape as the existing author-collection pass), falling
+  back to `today` only when there is no git history. Already-overdue content
+  now surfaces as overdue immediately on adoption, not six months later.
+  `docs/adoption-plan.md` and the `adopt` CLI summary both report an
+  "already due for review on arrival" count, and each affected backfill row
+  carries a warning label.
+
 ## [0.1.0] - 2026-08-30
 
 First tagged release. The deterministic layer and the interview are complete and
@@ -64,5 +80,6 @@ driver ships as an honest stub — see `docs/definition-of-done.md` and the
 - **Dogfood** (`docs/dogfood-notes.md`) — three runs of the framework against
   itself and the five bugs they fixed.
 
-[Unreleased]: https://github.com/nickejanssen/team-ai/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/nickejanssen/team-ai/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/nickejanssen/team-ai/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nickejanssen/team-ai/releases/tag/v0.1.0
