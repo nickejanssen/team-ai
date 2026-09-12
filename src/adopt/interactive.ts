@@ -14,9 +14,16 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import { validate } from "../schema/validate.js";
 import type { AdoptionPlan } from "./types.js";
+import type { FrontMatter } from "../schema/types.js";
 
 export interface RunInteractiveOptions {
   answers?: () => Promise<string>;
+}
+
+const VALID_STATUSES = new Set<FrontMatter["status"]>(["draft", "active", "deprecated"]);
+
+function isValidStatus(value: string): value is FrontMatter["status"] {
+  return VALID_STATUSES.has(value as FrontMatter["status"]);
 }
 
 type Decision = "approve" | "skip" | "edit";
@@ -53,7 +60,7 @@ export async function runInteractive(
       choices: [
         { value: "approve", name: "approve" },
         { value: "skip", name: "skip" },
-        { value: "edit", name: "edit (owner)" },
+        { value: "edit", name: "edit (owner, status)" },
       ],
     });
   };
@@ -84,6 +91,25 @@ export async function runInteractive(
         `New owner for ${item.path} (blank to keep "${item.frontmatter.owner}")`,
       );
       if (owner.length > 0) item.frontmatter.owner = owner;
+
+      // A backfilled doc always starts life as "active" (infer.ts has no way
+      // to know a doc is a placeholder awaiting real content). Editing status
+      // here is how a human corrects that — e.g. a story-bible placeholder
+      // that should read `draft` until its real GDD lands, not `active`
+      // alongside content that's actually authoritative.
+      const status = await askValue(
+        `Status for ${item.path} — draft | active | deprecated ` +
+          `(blank to keep "${item.frontmatter.status}")`,
+      );
+      if (status.length > 0) {
+        if (isValidStatus(status)) {
+          item.frontmatter.status = status;
+        } else {
+          console.error(
+            `"${status}" is not draft | active | deprecated — keeping "${item.frontmatter.status}" for ${item.path}`,
+          );
+        }
+      }
       item.approved = true;
     } else {
       item.approved = false;
