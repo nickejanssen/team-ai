@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-12
+
+### Added
+
+- **`team-ai adopt --interactive` can now correct a backfill item's `status`,
+  not just its `owner`.** `inferFrontmatter` always assigns a newly-backfilled
+  doc `status: active` — it has no way to know a doc is a placeholder awaiting
+  real content (a story-bible stub ahead of its GDD, for example). "edit" now
+  also prompts for `status` (`draft | active | deprecated`); blank keeps the
+  current value, and an invalid entry is rejected with the original kept
+  rather than writing something unvalidated. This is the mechanism for
+  telling the KB "this is provisional" instead of adopting placeholder
+  content as if it were as authoritative as real, invested-in source
+  material.
+
 ## [0.2.0] - 2026-09-12
 
 ### Changed
@@ -80,6 +95,7 @@ driver ships as an honest stub — see `docs/definition-of-done.md` and the
 - **Dogfood** (`docs/dogfood-notes.md`) — three runs of the framework against
   itself and the five bugs they fixed.
 
-[Unreleased]: https://github.com/nickejanssen/team-ai/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/nickejanssen/team-ai/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/nickejanssen/team-ai/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/nickejanssen/team-ai/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nickejanssen/team-ai/releases/tag/v0.1.0
