@@ -94,7 +94,7 @@ describe("inferFrontmatter", () => {
     expect(fm.owner).toBe("unassigned");
   });
 
-  it("sets review_by to today plus the horizon in UTC", () => {
+  it("sets review_by to today plus the horizon in UTC when there is no git history", () => {
     const fm = inferFrontmatter({
       relPath: "operating/x.md",
       body: "# X\n",
@@ -102,6 +102,35 @@ describe("inferFrontmatter", () => {
       gitAuthors: [],
       horizonDays: 180,
       today: TODAY,
+    });
+    expect(fm.review_by).toBe("2027-02-27");
+  });
+
+  it("anchors review_by on the last git commit date, not on today, when known", () => {
+    // Content last touched over two years before "today" — a fresh 180-day
+    // grace period from today would hide that it is already badly overdue.
+    const fm = inferFrontmatter({
+      relPath: "operating/x.md",
+      body: "# X\n",
+      namespace: "operating",
+      gitAuthors: [],
+      horizonDays: 180,
+      today: TODAY,
+      lastModified: new Date("2024-01-10T00:00:00Z"),
+    });
+    expect(fm.review_by).toBe("2024-07-08");
+    expect(fm.review_by < "2026-08-31").toBe(true); // already overdue as of TODAY
+  });
+
+  it("falls back to today when lastModified is explicitly null (no git history)", () => {
+    const fm = inferFrontmatter({
+      relPath: "operating/x.md",
+      body: "# X\n",
+      namespace: "operating",
+      gitAuthors: [],
+      horizonDays: 180,
+      today: TODAY,
+      lastModified: null,
     });
     expect(fm.review_by).toBe("2027-02-27");
   });

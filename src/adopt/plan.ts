@@ -28,7 +28,7 @@ import { packageVersion } from "../version.js";
 import { TEMPLATES_INSTANCE } from "../generator/entity-files.js";
 import { renderTree } from "../generator/render.js";
 import { detectSyncedSource, inferFrontmatter } from "./infer.js";
-import { getGitAuthorsMap } from "./git-owner.js";
+import { getGitAuthorsMap, getLastModifiedMap } from "./git-owner.js";
 import { proposeNamespaceMap } from "./namespaces.js";
 import { PENDING_NAMESPACE } from "./types.js";
 import type {
@@ -158,15 +158,28 @@ async function detectCollisions(root: string): Promise<string[]> {
   return [...dry.collisions].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
+// A backfill item is "already stale" when its inferred `review_by` (anchored
+// on last git commit, see infer.ts) already fell before the day the plan was
+// generated — i.e. the content is overdue for review NOW, on adoption,
+// before anyone has looked at it under team-ai. Computed from `plan.created`
+// rather than a separate `today` param so this stays a pure function of the
+// plan, same as the other renderDoc-only summary stats below.
+export function countAlreadyStale(plan: Pick<AdoptionPlan, "created" | "backfill">): number {
+  const todayStr = plan.created.slice(0, 10);
+  return plan.backfill.filter((item) => item.frontmatter.review_by < todayStr).length;
+}
+
 function renderDoc(plan: AdoptionPlan, assessment: string): string {
   const source = readFileSync(fileURLToPath(DOC_TEMPLATE), "utf8");
   const satisfied = plan.gap.filter((g) => g.satisfied).length;
+  const todayStr = plan.created.slice(0, 10);
   return Handlebars.create().compile(source, { noEscape: true })({
     ...plan,
     backfill: plan.backfill.map((item) => ({
       ...item,
       namespaceLabel:
         item.namespace === PENDING_NAMESPACE ? "**(pending decision)**" : `\`${item.namespace}\``,
+      staleLabel: item.frontmatter.review_by < todayStr ? " — ⚠ already due for review" : "",
     })),
     assessment,
     gapSatisfied: satisfied,
@@ -174,6 +187,7 @@ function renderDoc(plan: AdoptionPlan, assessment: string): string {
     backfillCount: plan.backfill.length,
     decisionCount: plan.namespace_map.decisions.length,
     collisionCount: plan.collisions.length,
+    alreadyStale: countAlreadyStale(plan),
   });
 }
 
@@ -236,7 +250,12 @@ export async function buildAdoptionPlan(opts: BuildAdoptionPlanOptions): Promise
   const relabels: RelabelItem[] = [];
 
   // One git traversal for the whole docs tree, not one subprocess per file.
-  const authorsByPath = getGitAuthorsMap(root, toPosix(relative(root, docsRoot)));
+  const docsScope = toPosix(relative(root, docsRoot));
+  const authorsByPath = getGitAuthorsMap(root, docsScope);
+  // A second single traversal for last-modified dates, so `review_by` anchors
+  // on when a doc was actually last touched rather than on "today" — see the
+  // comment on `InferFrontmatterOptions.lastModified`.
+  const lastModifiedByPath = getLastModifiedMap(root, docsScope);
 
   const { files: markdownFiles, archivedSkipped } = markdownUnder(docsRoot, includeArchived);
   for (const relFromDocs of markdownFiles) {
@@ -255,6 +274,7 @@ export async function buildAdoptionPlan(opts: BuildAdoptionPlanOptions): Promise
         gitAuthors: authorsByPath.get(relFromRoot) ?? [],
         horizonDays,
         today,
+        lastModified: lastModifiedByPath.get(relFromRoot) ?? null,
       });
       backfill.push({
         path: relFromRoot,
@@ -276,6 +296,7 @@ export async function buildAdoptionPlan(opts: BuildAdoptionPlanOptions): Promise
         gitAuthors: authorsByPath.get(relFromRoot) ?? [],
         horizonDays,
         today,
+        lastModified: lastModifiedByPath.get(relFromRoot) ?? null,
       });
       backfill.push({
         path: relFromRoot,

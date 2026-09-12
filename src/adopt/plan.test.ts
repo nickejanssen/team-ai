@@ -1,12 +1,14 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { parse } from "yaml";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { validate } from "../schema/validate.js";
-import { buildAdoptionPlan } from "./plan.js";
+import { buildAdoptionPlan, countAlreadyStale } from "./plan.js";
 
 const FIXTURE = "src/adopt/fixtures/legacy-repo";
 const FIXTURE_FILES = ["README.md", "docs/architecture/a.md", "docs/notes/b.md", "docs/prd/c.md"];
@@ -19,6 +21,14 @@ function tmp(): string {
   const dir = mkdtempSync(join(tmpdir(), "team-ai-plan-"));
   dirs.push(dir);
   return dir;
+}
+
+function git(repo: string, args: string[], dateEnv?: string): void {
+  const env =
+    dateEnv === undefined
+      ? process.env
+      : { ...process.env, GIT_AUTHOR_DATE: dateEnv, GIT_COMMITTER_DATE: dateEnv };
+  execFileSync("git", args, { cwd: repo, env, stdio: "ignore" });
 }
 
 function fingerprint(): Record<string, string> {
@@ -49,7 +59,6 @@ describe("buildAdoptionPlan", () => {
     expect(fingerprint()).toEqual(before);
 
     const yaml = readFileSync(join(out, "adoption-plan.yaml"), "utf8");
-    const { parse } = await import("yaml");
     expect(validate("adoption-plan", parse(yaml)).ok).toBe(true);
 
     expect(plan.backfill).toHaveLength(3);
@@ -78,5 +87,45 @@ describe("buildAdoptionPlan", () => {
     expect(plan.namespace_map.decisions.map((d) => d.folder)).not.toContain("prd");
     const prdDoc = plan.backfill.find((b) => b.path === "docs/prd/c.md");
     expect(prdDoc?.namespace).toBe("operating");
+  });
+});
+
+describe("buildAdoptionPlan — freshness anchored on last git edit", () => {
+  it("gives a long-untouched doc a review_by that is already overdue, not a fresh grace period", async () => {
+    const repo = tmp();
+    git(repo, ["init", "-q"]);
+    git(repo, ["config", "user.email", "t@example.com"]);
+    git(repo, ["config", "user.name", "Test"]);
+    mkdirSync(join(repo, "docs", "architecture"), { recursive: true });
+    writeFileSync(join(repo, "docs", "architecture", "old.md"), "# Old\n\ntext\n");
+    git(repo, ["add", "."]);
+    git(repo, ["commit", "-q", "-m", "add old doc"], "2024-01-10T00:00:00Z");
+
+    const out = tmp();
+    const plan = await buildAdoptionPlan({ root: repo, out, horizonDays: 180, today: TODAY });
+
+    const item = plan.backfill.find((b) => b.path === "docs/architecture/old.md");
+    expect(item?.frontmatter.review_by).toBe("2024-07-08");
+    expect(item?.frontmatter.review_by).not.toBe("2027-02-27"); // not a fresh today+180 clock
+    expect(countAlreadyStale(plan)).toBe(1);
+  });
+
+  it("falls back to today+horizon for a doc with no git history at all", async () => {
+    const repo = tmp();
+    git(repo, ["init", "-q"]);
+    git(repo, ["config", "user.email", "t@example.com"]);
+    git(repo, ["config", "user.name", "Test"]);
+    mkdirSync(join(repo, "docs", "architecture"), { recursive: true });
+    // Committed so it's discoverable, but with a recent date well within today+180.
+    writeFileSync(join(repo, "docs", "architecture", "fresh.md"), "# Fresh\n");
+    git(repo, ["add", "."]);
+    git(repo, ["commit", "-q", "-m", "add fresh doc"], TODAY.toISOString());
+
+    const out = tmp();
+    const plan = await buildAdoptionPlan({ root: repo, out, horizonDays: 180, today: TODAY });
+
+    const item = plan.backfill.find((b) => b.path === "docs/architecture/fresh.md");
+    expect(item?.frontmatter.review_by).toBe("2027-02-27");
+    expect(countAlreadyStale(plan)).toBe(0);
   });
 });

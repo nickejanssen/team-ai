@@ -35,6 +35,36 @@ export function getGitAuthors(filePath: string, repoRoot: string): string[] {
 }
 
 /**
+ * One `git log --name-only` pass over `scopeRelPath`, same traversal shape as
+ * `getGitAuthorsMap`. `git log` without `--follow` walks newest-commit-first,
+ * so the FIRST time a path appears is its most recent commit — exactly the
+ * "when was this actually last touched" date that front-matter inference
+ * needs to give an honest `review_by` to pre-existing content (anchored on
+ * last edit, not on "today", so already-stale content reads as already
+ * stale instead of getting a fresh multi-month grace period on adoption).
+ * Paths not in git are simply absent from the map.
+ */
+export function getLastModifiedMap(repoRoot: string, scopeRelPath: string): Map<string, Date> {
+  const scope = scopeRelPath.length > 0 ? scopeRelPath : ".";
+  const out = runGitLog(repoRoot, [`--format=${REC}%aI`, "--name-only", "--", scope]);
+  const map = new Map<string, Date>();
+  if (out === null) return map;
+
+  let currentDate: Date | null = null;
+  for (const rawLine of out.split(/\r?\n/)) {
+    if (rawLine.startsWith(REC)) {
+      const parsed = new Date(rawLine.slice(REC.length).trim());
+      currentDate = Number.isNaN(parsed.getTime()) ? null : parsed;
+      continue;
+    }
+    const path = rawLine.trim();
+    if (path.length === 0 || currentDate === null) continue;
+    if (!map.has(path)) map.set(path, currentDate);
+  }
+  return map;
+}
+
+/**
  * One `git log --name-only` pass over `scopeRelPath` (a repo-relative directory,
  * or "." for the whole repo). Returns a map from repo-relative POSIX path to the
  * commit authors that touched it, newest first, one entry per commit (so

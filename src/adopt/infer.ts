@@ -15,6 +15,13 @@ export interface InferFrontmatterOptions {
   gitAuthors: string[];
   horizonDays: number;
   today: Date;
+  // The doc's most recent git commit date, when known. `review_by` anchors
+  // here instead of on `today` so pre-existing content that hasn't been
+  // touched in years is honestly overdue on adoption, not given a fresh
+  // multi-month grace period as if someone reviewed it today. Content with
+  // no git history (untracked / newly authored) has no better anchor than
+  // `today`, which is the prior behavior.
+  lastModified?: Date | null;
 }
 
 const HEAD_LINES = 8;
@@ -65,9 +72,9 @@ function inferOwner(gitAuthors: string[]): string {
     .map(([name]) => name)[0] as string;
 }
 
-function inferReviewBy(today: Date, horizonDays: number): string {
+function inferReviewBy(anchor: Date, horizonDays: number): string {
   const at = new Date(
-    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + horizonDays),
+    Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate() + horizonDays),
   );
   return at.toISOString().slice(0, 10);
 }
@@ -111,7 +118,7 @@ export function inferFrontmatter(opts: InferFrontmatterOptions): FrontMatter {
     title: inferTitle(opts.relPath, opts.body),
     owner: inferOwner(opts.gitAuthors),
     status: "active",
-    review_by: inferReviewBy(opts.today, opts.horizonDays),
+    review_by: inferReviewBy(opts.lastModified ?? opts.today, opts.horizonDays),
     sensitivity: "internal",
     source: detectSyncedSource(opts.body) ?? "authored",
     tags: inferTags(opts.body),

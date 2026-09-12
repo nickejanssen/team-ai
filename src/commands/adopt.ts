@@ -12,7 +12,7 @@ import { parse as parseYaml } from "yaml";
 
 import { applyPlan } from "../adopt/apply.js";
 import { runInteractive } from "../adopt/interactive.js";
-import { buildAdoptionPlan } from "../adopt/plan.js";
+import { buildAdoptionPlan, countAlreadyStale } from "../adopt/plan.js";
 
 export interface AdoptCommandOptions {
   root?: string;
@@ -85,6 +85,10 @@ export async function run(opts: AdoptCommandOptions): Promise<number> {
   );
   console.log(
     `skipped ${plan.archived_skipped} archived/generated docs (--include-archived to include)`,
+  );
+  console.log(
+    `${countAlreadyStale(plan)} of those backfill items are already due for review on arrival ` +
+      "(anchored on last git edit, not on today)",
   );
   console.log(
     "review docs/adoption-plan.md, then `team-ai adopt --interactive` and `team-ai adopt --apply`",
