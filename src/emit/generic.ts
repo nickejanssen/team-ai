@@ -8,6 +8,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { resolveWithin } from "../generator/contain.js";
 import type { EmitInput } from "./index.js";
 
 interface GenericAgent {
@@ -19,7 +20,10 @@ interface GenericAgent {
   max_hops: number;
 }
 
-function write(path: string, content: string): string {
+// Agent names come from instance files a person can edit, so every path is
+// resolved through `resolveWithin` rather than joined blindly.
+function write(outDir: string, rel: string, content: string): string {
+  const path = resolveWithin(outDir, rel);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, content, "utf8");
   return path;
@@ -36,12 +40,12 @@ export function emitGeneric(input: EmitInput, outDir: string): string[] {
     tools: agent.def.tools,
     max_hops: agent.def.max_hops,
   }));
-  written.push(write(join(outDir, "agents.json"), `${JSON.stringify(agents, null, 2)}\n`));
+  written.push(write(outDir, "agents.json", `${JSON.stringify(agents, null, 2)}\n`));
 
   for (const agent of input.agents) {
     const body = agent.instructions.trim();
     written.push(
-      write(join(outDir, "prompts", `${agent.name}.md`), `${body}${body.length > 0 ? "\n" : ""}`),
+      write(outDir, `prompts/${agent.name}.md`, `${body}${body.length > 0 ? "\n" : ""}`),
     );
   }
 

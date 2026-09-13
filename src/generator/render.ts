@@ -8,10 +8,11 @@
 
 import { existsSync, readdirSync, readFileSync, type Dirent } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import Handlebars from "handlebars";
 
+import { withinDest } from "./contain.js";
 import { sha256Of, type GeneratedEntry } from "./generated-manifest.js";
 
 export type CollisionMode = "report" | "siblings" | "skip";
@@ -201,11 +202,6 @@ function outputRelPath(templateRel: string): string {
 
 function isTemplatePartial(templateRel: string): boolean {
   return templateRel.split("/").some((segment) => segment.startsWith("_"));
-}
-
-function withinDest(destResolved: string, target: string): boolean {
-  const rel = relative(destResolved, target);
-  return rel.length > 0 && !rel.startsWith("..") && !isAbsolute(rel);
 }
 
 export async function renderTree(opts: RenderTreeOptions): Promise<RenderResult> {
