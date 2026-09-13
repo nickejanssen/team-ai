@@ -32,11 +32,19 @@ jobs:
       - run: node dist/cli.js doctor --self
   secret-scan:
     runs-on: ubuntu-latest
+    # gitleaks-action lists a pull request's commits through the API, so on
+    # pull_request events it needs a token that can read PRs. Job-level
+    # permissions replace the workflow-level block, so contents: read is
+    # restated here.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
           GITLEAKS_CONFIG: .github/workflows/.gitleaks.toml
