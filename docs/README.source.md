@@ -2,11 +2,18 @@
 
 A toolkit for standing up a team's AI capability: a knowledge base your team owns, an SME that routes questions to the right place, and role and domain agents that share one set of plumbing.
 
-Run one command, answer about 25 questions, get a working repo.
+Clone and build it once, answer about 25 questions, get a working repo.
 
 ```
-npx team-ai init
+git clone https://github.com/nickejanssen/team-ai.git
+cd team-ai
+nvm use 22                # Node 22 avoids compiling the native SQLite module
+npm ci && npm run build
+npm link                  # puts `team-ai` on your PATH
+team-ai init              # run from the directory you want to generate into
 ```
+
+> **Do not run `npx team-ai`.** team-ai is not published to npm, and the `team-ai` name on the npm registry belongs to an unrelated package. `npx team-ai` would download and execute that package instead. Install from this repository as shown above.
 
 **Full specs:** [`docs/architecture.md`](docs/architecture.md) · [`docs/interview-spec.md`](docs/interview-spec.md)
 
@@ -123,9 +130,28 @@ Three repo modes:
 
 ## Setup
 
+### Install
+
+team-ai is installed from this repository. It is not published to npm, and the `team-ai` name on npm belongs to an unrelated package, so never use `npx team-ai`.
+
+**Use Node 22** (pinned in `.nvmrc`). Search uses `better-sqlite3`, a native SQLite module that ships prebuilt binaries for Node 22 on Windows, macOS, and Linux. On newer Node versions such as 24 there is no prebuilt binary, so npm compiles it from source, which needs a C++ toolchain (Visual Studio Build Tools with "Desktop development with C++" on Windows, Xcode Command Line Tools on macOS, `build-essential` and Python on Linux). Node 22 avoids all of that.
+
 ```
-npx team-ai init          # interview, three confirmation gates, then generate
-npx team-ai doctor        # what is still missing
+git clone https://github.com/nickejanssen/team-ai.git
+cd team-ai
+nvm use 22                # or install Node 22 directly
+npm ci
+npm run build
+npm link                  # optional: puts `team-ai` on your PATH
+```
+
+Pin a version by checking out a release tag before `npm ci`. Without `npm link`, run the CLI by path: `node /path/to/team-ai/bin/team-ai.js <command>`. On Windows, clone to a short path: if the native module has to compile, paths longer than 260 characters make the build fail.
+
+### Use
+
+```
+team-ai init              # interview, three confirmation gates, then generate
+team-ai doctor            # what is still missing
 ```
 
 The interview runs preflight first and scans for AI infrastructure you already have. It will tell you to extend it, coexist with it, or stand down, rather than quietly building a duplicate.

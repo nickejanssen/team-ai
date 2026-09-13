@@ -6,8 +6,9 @@ description: Run the team-ai setup interview inside a chat instead of a terminal
 # scaffold-interview
 
 Drive the `team-ai` setup interview as a chat conversation. Same question bank as
-`npx team-ai init`, same branching logic, same three gates — a different
-renderer. The output is a `team-profile.yaml` an engineer feeds to
+`team-ai init`, same branching logic, same three gates — a different
+renderer. (`team-ai` means the CLI built from a clone of the framework repo —
+never `npx team-ai`, which fetches an unrelated npm package of the same name.) The output is a `team-profile.yaml` an engineer feeds to
 `team-ai init --resume`.
 
 This matters for adoption: an engineering manager on another team can finish the
