@@ -1,6 +1,14 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -127,5 +135,67 @@ describe("buildAdoptionPlan — freshness anchored on last git edit", () => {
     const item = plan.backfill.find((b) => b.path === "docs/architecture/fresh.md");
     expect(item?.frontmatter.review_by).toBe("2027-02-27");
     expect(countAlreadyStale(plan)).toBe(0);
+  });
+});
+
+describe("buildAdoptionPlan — CRLF-fronted docs are not mistaken for un-fronted ones", () => {
+  it("leaves a doc completely alone when it already has valid KB front matter opened with CRLF", async () => {
+    const out = tmp();
+    // Real Arcwright files were found with CRLF front matter during dogfooding
+    // — an exact "---\n" prefix check reads this as no front matter at all,
+    // which at apply time means stacking a second block on top of a real one.
+    // With genuinely valid, already-complete front matter, the doc needs
+    // neither a backfill entry NOR a relabel entry — it's simply done.
+    // Only the opening delimiter needs a trailing \r to reproduce the bug —
+    // that's the one line hasFrontmatter's regex has to get right. Plain \n
+    // for the rest avoids an unrelated YAML-parser quirk with \r inside a
+    // flow sequence, which isn't what this test is about.
+    const crlfDoc =
+      "---\r\n" +
+      "id: platform.already-fronted.x\n" +
+      "namespace: platform\n" +
+      "title: Already Fronted\n" +
+      "owner: Ada\n" +
+      "status: active\n" +
+      'review_by: "2027-01-01"\n' +
+      "sensitivity: internal\n" +
+      "source: authored\n" +
+      "tags: []\n" +
+      "supersedes: []\n" +
+      "---\n\n# Existing\n";
+
+    // Reuse the legacy-repo fixture layout, plus one extra CRLF-fronted file.
+    const repo = mkdtempSync(join(tmpdir(), "team-ai-crlf-"));
+    dirs.push(repo);
+    cpSync(FIXTURE, repo, { recursive: true });
+    mkdirSync(join(repo, "docs", "already-fronted"), { recursive: true });
+    writeFileSync(join(repo, "docs", "already-fronted", "x.md"), crlfDoc);
+
+    const plan = await buildAdoptionPlan({ root: repo, out, horizonDays: 180, today: TODAY });
+    expect(plan.backfill.some((b) => b.path === "docs/already-fronted/x.md")).toBe(false);
+    expect(plan.relabels.some((r) => r.path === "docs/already-fronted/x.md")).toBe(false);
+  });
+
+  it("still flags CRLF-fronted content whose existing front matter is invalid, but never as 'no front matter at all'", async () => {
+    const out = tmp();
+    // Not every CRLF-fronted file is KB-shaped (e.g. a Claude Skill manifest's
+    // `name`/`description` front matter) — that's a real, separate problem
+    // (front matter exists, but isn't a valid KB doc) and SHOULD still be
+    // flagged for a human to resolve. The point is it must be flagged via the
+    // "existing front matter is invalid" path, not silently treated as if
+    // there were no front matter and prepended with a second block.
+    const skillLikeDoc =
+      "---\r\nname: some-skill\r\ndescription: does a thing\r\n---\r\n\r\nBody\r\n";
+    const repo = mkdtempSync(join(tmpdir(), "team-ai-crlf-invalid-"));
+    dirs.push(repo);
+    cpSync(FIXTURE, repo, { recursive: true });
+    mkdirSync(join(repo, "docs", "skills"), { recursive: true });
+    writeFileSync(join(repo, "docs", "skills", "y.md"), skillLikeDoc);
+
+    const plan = await buildAdoptionPlan({ root: repo, out, horizonDays: 180, today: TODAY });
+    const item = plan.backfill.find((b) => b.path === "docs/skills/y.md");
+    expect(item).toBeDefined();
+    expect(item?.conflict).not.toBeNull(); // flagged as invalid existing front matter
+    expect(item?.conflict).toMatch(/must have required property|required/i);
   });
 });

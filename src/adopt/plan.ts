@@ -28,6 +28,7 @@ import { packageVersion } from "../version.js";
 import { TEMPLATES_INSTANCE } from "../generator/entity-files.js";
 import { renderTree } from "../generator/render.js";
 import { detectSyncedSource, inferFrontmatter } from "./infer.js";
+import { hasFrontmatter } from "./backfill.js";
 import { getGitAuthorsMap, getLastModifiedMap } from "./git-owner.js";
 import { proposeNamespaceMap } from "./namespaces.js";
 import { PENDING_NAMESPACE } from "./types.js";
@@ -264,9 +265,8 @@ export async function buildAdoptionPlan(opts: BuildAdoptionPlanOptions): Promise
     const folder = relFromDocs.includes("/") ? (relFromDocs.split("/")[0] ?? "") : "";
     const namespace = namespaceForFolder(folder);
     const raw = readFileSync(abs, "utf8");
-    const hasFrontmatter = raw.startsWith("---\n");
 
-    if (!hasFrontmatter) {
+    if (!hasFrontmatter(raw)) {
       const fm = inferFrontmatter({
         relPath: relFromDocs,
         body: raw,
@@ -286,7 +286,39 @@ export async function buildAdoptionPlan(opts: BuildAdoptionPlanOptions): Promise
       continue;
     }
 
-    const { data, body } = parseFrontmatter(raw);
+    // A real, hand-authored repo will contain front matter that some other
+    // tool's YAML parser tolerated but this one doesn't (a folded scalar with
+    // no fold indicator was found in the wild during dogfooding). Detecting
+    // that a file HAS front matter (above) is not the same as it being valid
+    // YAML — an unguarded parse here would crash the whole scan over one bad
+    // file instead of flagging just that file, which is worse than any of
+    // the outcomes a flag can lead to.
+    let data: Record<string, unknown>;
+    let body: string;
+    try {
+      ({ data, body } = parseFrontmatter(raw));
+    } catch (err) {
+      const reason =
+        err instanceof Error ? (err.message.split("\n")[0] ?? err.message) : String(err);
+      const fm = inferFrontmatter({
+        relPath: relFromDocs,
+        body: raw,
+        namespace,
+        gitAuthors: authorsByPath.get(relFromRoot) ?? [],
+        horizonDays,
+        today,
+        lastModified: lastModifiedByPath.get(relFromRoot) ?? null,
+      });
+      backfill.push({
+        path: relFromRoot,
+        namespace,
+        frontmatter: fm,
+        approved: false,
+        conflict: `existing front matter does not parse as YAML: ${reason}`,
+      });
+      continue;
+    }
+
     const result = validate("frontmatter", data);
     if (!result.ok) {
       const fm = inferFrontmatter({

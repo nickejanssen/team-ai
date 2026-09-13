@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { validate } from "../schema/validate.js";
-import { applyFrontmatter } from "./backfill.js";
+import { applyFrontmatter, hasFrontmatter } from "./backfill.js";
 import { inferFrontmatter } from "./infer.js";
 
 const dirs: string[] = [];
@@ -64,5 +64,25 @@ describe("applyFrontmatter", () => {
     expect(result.ok).toBe(false);
     expect(result.reason).toMatch(/already/);
     expect(readFileSync(path, "utf8")).toBe(original);
+  });
+
+  it("detects CRLF-fronted front matter that an exact '---\\n' prefix check would miss", () => {
+    // A real file can legitimately open with "---\r\n" (CRLF). Confirmed against
+    // a real Arcwright file during dogfooding: an exact "---\n" prefix check
+    // reads this as having NO front matter, which would make apply prepend a
+    // second block on top of the real one.
+    const original = "---\r\ntitle: Existing\r\n---\r\n\r\n# Charter\r\n";
+    const path = tmpFile("charter.md", original);
+
+    expect(hasFrontmatter(original)).toBe(true);
+
+    const result = applyFrontmatter(path, fm, {});
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/already/);
+    expect(readFileSync(path, "utf8")).toBe(original);
+  });
+
+  it("hasFrontmatter is false for a file with no front matter at all", () => {
+    expect(hasFrontmatter("# Charter\n\nBody.\n")).toBe(false);
   });
 });
