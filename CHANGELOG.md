@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-13
+
+### Fixed
+
+- **`team-ai adopt` misdetected CRLF-opened front matter as missing entirely.**
+  `raw.startsWith("---\n")` returns `false` for a file opening with `---\r\n`,
+  which real files in the wild do. At apply time that would have prepended a
+  second front-matter block on top of a real one instead of leaving the file
+  alone. Fixed with a single shared `hasFrontmatter()` (`/^---\r?\n/`) used by
+  both plan-time detection and apply-time's own guard, so the two can no
+  longer disagree with each other.
+- **A single file with front matter that fails strict YAML parsing crashed
+  the entire adoption scan.** Once CRLF front matter is correctly detected as
+  present, it gets parsed — and a real file's YAML, tolerated by some tooling
+  but rejected by this parser, threw an uncaught `YAMLParseError` that
+  aborted the whole repo scan instead of flagging just that file.
+  `parseFrontmatter` failures now become a normal backfill conflict for a
+  human to resolve.
+
 ## [0.3.0] - 2026-09-12
 
 ### Added
@@ -95,7 +114,8 @@ driver ships as an honest stub — see `docs/definition-of-done.md` and the
 - **Dogfood** (`docs/dogfood-notes.md`) — three runs of the framework against
   itself and the five bugs they fixed.
 
-[Unreleased]: https://github.com/nickejanssen/team-ai/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/nickejanssen/team-ai/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/nickejanssen/team-ai/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/nickejanssen/team-ai/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/nickejanssen/team-ai/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nickejanssen/team-ai/releases/tag/v0.1.0
