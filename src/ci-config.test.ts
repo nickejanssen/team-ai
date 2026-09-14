@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
@@ -27,7 +27,7 @@ const REUSABLE = ["validate-kb", "validate-spoke", "evals"] as const;
 const DOCUMENTED_INPUTS: Record<string, string> = {
   "node-version": "22",
   root: ".",
-  "team-ai-version": "latest",
+  "team-ai-ref": "v0",
 };
 
 describe.each(REUSABLE)("%s.reusable.yml", (name) => {
@@ -64,5 +64,18 @@ describe("evals.reusable.yml", () => {
     expect(raw).toContain("if: always()");
     expect(raw).toContain("run-evals");
     expect(raw).toContain("--json");
+  });
+});
+
+describe("no workflow runs the unrelated npm package", () => {
+  const files = [
+    ...readdirSync(".github/workflows").map((f) => `.github/workflows/${f}`),
+    ...readdirSync("templates", { recursive: true })
+      .map(String)
+      .filter((f) => f.endsWith(".hbs"))
+      .map((f) => `templates/${f}`),
+  ];
+  it.each(files)("%s does not call npx team-ai", (file) => {
+    expect(readFileSync(file, "utf8")).not.toMatch(/npx\s+(--yes\s+)?team-ai/);
   });
 });

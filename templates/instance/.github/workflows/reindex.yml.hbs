@@ -13,4 +13,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: npx team-ai reindex
+      - uses: actions/checkout@v4
+        with:
+          repository: nickejanssen/team-ai
+          ref: v0
+          path: .team-ai-cli
+      - run: npm ci && npm run build
+        working-directory: .team-ai-cli
+      - run: node .team-ai-cli/dist/cli.js reindex

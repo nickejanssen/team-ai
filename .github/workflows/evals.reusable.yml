@@ -10,10 +10,10 @@ on:
         description: Instance root directory to run evals in
         type: string
         default: "."
-      team-ai-version:
-        description: team-ai version to run via npx
+      team-ai-ref:
+        description: team-ai git ref (tag or branch) to build and run
         type: string
-        default: "latest"
+        default: "v0"
 permissions:
   contents: read
 jobs:
@@ -21,10 +21,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: nickejanssen/team-ai
+          ref: ${{ inputs.team-ai-ref }}
+          path: .team-ai-cli
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
-      - run: npx team-ai@${{ inputs.team-ai-version }} run-evals --root ${{ inputs.root }} --json | tee eval-report.json
+      - run: npm ci && npm run build
+        working-directory: .team-ai-cli
+      - run: node .team-ai-cli/dist/cli.js run-evals --root ${{ inputs.root }} --json | tee eval-report.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
