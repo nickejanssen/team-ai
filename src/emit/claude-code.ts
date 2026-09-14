@@ -6,14 +6,18 @@
 // and skills the plugin ships.
 
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 
 import { stringify as stringifyYaml } from "yaml";
 
+import { resolveWithin } from "../generator/contain.js";
 import { packageVersion } from "../version.js";
 import type { EmitInput } from "./index.js";
 
-function write(path: string, content: string): string {
+// Agent names come from instance files a person can edit, so every path is
+// resolved through `resolveWithin` rather than joined blindly.
+function write(outDir: string, rel: string, content: string): string {
+  const path = resolveWithin(outDir, rel);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, content, "utf8");
   return path;
@@ -37,7 +41,7 @@ export function emitClaudeCode(input: EmitInput, outDir: string): string[] {
   const written: string[] = [];
 
   for (const agent of input.agents) {
-    written.push(write(join(outDir, ".claude/agents", `${agent.name}.md`), frontMatter(agent)));
+    written.push(write(outDir, `.claude/agents/${agent.name}.md`, frontMatter(agent)));
   }
 
   const plugin = {
@@ -47,9 +51,7 @@ export function emitClaudeCode(input: EmitInput, outDir: string): string[] {
     agents: input.agents.map((a) => `./.claude/agents/${a.name}.md`),
     skills: input.skills.map((s) => s.name),
   };
-  written.push(
-    write(join(outDir, ".claude-plugin/plugin.json"), `${JSON.stringify(plugin, null, 2)}\n`),
-  );
+  written.push(write(outDir, ".claude-plugin/plugin.json", `${JSON.stringify(plugin, null, 2)}\n`));
 
   return written;
 }

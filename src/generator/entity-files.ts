@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 
 import type { RoleArchetype } from "../catalog/types.js";
 import { generateStub } from "../catalog/stub.js";
+import { resolveWithin } from "./contain.js";
 import { sha256Of } from "./generated-manifest.js";
 import { renderTemplate, type RenderResult } from "./render.js";
 
@@ -46,6 +47,20 @@ function asStrings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 }
 
+// Role and persona names become path segments. They can come from a
+// hand-edited team-profile.yaml or a catalog file, neither of which is checked
+// against the interview's fixed options, so they are validated before anything
+// is written.
+const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function assertSafeName(kind: "role" | "persona", name: string): void {
+  if (!SAFE_NAME.test(name)) {
+    throw new Error(
+      `invalid ${kind} name '${name}': must be a single path segment of letters, digits, '.', '_' or '-'`,
+    );
+  }
+}
+
 /**
  * Classify one generated file against what is on disk and the prior manifest,
  * then write it unless doing so would clobber human work. Mirrors `renderTree`'s
@@ -59,7 +74,7 @@ function writeIfSafe(
   onCollision: EntityCollisionMode,
   result: RenderResult,
 ): void {
-  const outAbs = join(renderDir, outRel);
+  const outAbs = resolveWithin(renderDir, outRel);
 
   if (!existsSync(outAbs)) {
     result.created.push(outRel);
@@ -99,6 +114,11 @@ export function renderEntityFiles(
   onCollision: EntityCollisionMode,
   result: RenderResult,
 ): void {
+  // Validate every name before writing anything, so one bad entry cannot leave a
+  // half-generated tree behind.
+  for (const role of asRoles(context.roles)) assertSafeName("role", role.name);
+  for (const persona of asStrings(context.personas)) assertSafeName("persona", persona);
+
   const namespaces = asStrings(context.namespaces);
   const firstNamespace = namespaces[0] ?? "operating";
 

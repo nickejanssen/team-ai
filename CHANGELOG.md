@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **The generator and emitters could write outside their output directory.** A
+  role or persona name containing `..` segments was joined straight into the
+  write path, so a name like `../docs/agents/probe` wrote a file into a
+  directory the generator must never touch. Such a name could arrive from a
+  hand-edited `team-profile.yaml`, which `resume` and `upgrade` load without
+  re-validating answers, or from a catalog file, where a role's `name` is an
+  unconstrained string. The interactive interview was not affected, because its
+  multi-select answers accept only fixed option values. Role and persona names
+  are now validated as a single path segment before anything is written, and
+  every generator and emitter write goes through a shared containment check
+  that refuses any path resolving outside the output directory.
+
 ## [0.3.1] - 2026-09-13
 
 ### Fixed
