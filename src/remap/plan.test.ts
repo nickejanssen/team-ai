@@ -63,6 +63,28 @@ describe("buildRemapPlan", () => {
     });
   });
 
+  it.each([
+    ["hyphenated", "new-ns", "newns.docs.a"],
+    ["slash-separated", "partners/acme-widgets", "partnersacmewidgets.docs.a"],
+  ])("accepts a %s destination and normalizes its id segment", (_label, destination, toId) => {
+    const { instance: inst, kb } = instance();
+    writeFileSync(join(kb, "a.md"), kbDoc("platform", "a"), "utf8");
+
+    const plan = buildRemapPlan({
+      instance: inst,
+      mapping: { namespaces: { platform: destination }, files: {} },
+    });
+
+    expect(plan.items).toMatchObject([
+      {
+        path: "a.md",
+        status: "remap",
+        to_namespace: destination,
+        to_id: toId,
+      },
+    ]);
+  });
+
   it("ignores excluded paths and skips files without KB front matter", () => {
     const { instance: inst, kb } = instance();
     writeFileSync(join(kb, "archive", "old.md"), "no front matter", "utf8");
@@ -81,6 +103,24 @@ describe("buildRemapPlan", () => {
     });
     expect(plan.items.find((i) => i.path === "u.md")?.status).toBe("conflict");
     expect(plan.items.find((i) => i.path === "q.md")?.status).toBe("conflict");
+  });
+
+  it("does not treat inherited mapping properties as namespace rules", () => {
+    const { instance: inst, kb } = instance();
+    writeFileSync(join(kb, "constructor.md"), kbDoc("constructor", "constructor"), "utf8");
+
+    const plan = buildRemapPlan({
+      instance: inst,
+      mapping: { namespaces: {}, files: {} },
+    });
+
+    expect(plan.items).toMatchObject([
+      {
+        path: "constructor.md",
+        status: "conflict",
+        reason: "no mapping rule for namespace 'constructor'",
+      },
+    ]);
   });
 
   it("marks YAML key-spacing variants as conflicts before apply", () => {

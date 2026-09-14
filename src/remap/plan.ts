@@ -4,6 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { hasFrontmatter } from "../adopt/backfill.js";
+import { namespaceIdSegment } from "../adopt/infer.js";
 import { parseFrontmatter } from "../kb/frontmatter.js";
 import { isExcluded } from "../kb/loader.js";
 import { resolveKbScope } from "../retrieval/index-lock.js";
@@ -33,7 +34,7 @@ export interface RemapPlan {
 const FRONT_MATTER = /^(---\r?\n)([\s\S]*?)(\r?\n---(?:\r?\n|$))/;
 const ID_VALUE = "[a-z0-9]+(?:\\.[a-z0-9-]+)+";
 const NAMESPACE_VALUE = "[a-z0-9][a-z0-9/-]*";
-const DESTINATION_NAMESPACE = /^[a-z0-9]+$/;
+const DESTINATION_NAMESPACE = /^[a-z0-9][a-z0-9/-]*$/;
 
 interface ScalarSpan {
   start: number;
@@ -63,7 +64,7 @@ function validateMappingSection(value: unknown, section: string): Record<string,
     }
     if (typeof target !== "string" || !DESTINATION_NAMESPACE.test(target)) {
       throw new Error(
-        `invalid remap mapping: ${section}.${key} destination must match ^[a-z0-9]+$`,
+        `invalid remap mapping: ${section}.${key} destination must match ^[a-z0-9][a-z0-9/-]*$`,
       );
     }
     validated[key] = target;
@@ -125,7 +126,12 @@ function walk(dir: string, prefix = ""): string[] {
 
 export function rewriteId(id: string, toNamespace: string): string {
   const dot = id.indexOf(".");
-  return dot === -1 ? toNamespace : `${toNamespace}${id.slice(dot)}`;
+  const first = namespaceIdSegment(toNamespace);
+  return dot === -1 ? first : `${first}${id.slice(dot)}`;
+}
+
+function ownMappingValue(mapping: Record<string, string>, key: string): string | undefined {
+  return Object.hasOwn(mapping, key) ? mapping[key] : undefined;
 }
 
 export function buildRemapPlan(opts: { instance: string; mapping: unknown }): RemapPlan {
@@ -189,7 +195,7 @@ export function buildRemapPlan(opts: { instance: string; mapping: unknown }): Re
       });
       continue;
     }
-    const toNs = mapping.files[rel] ?? mapping.namespaces[fromNs];
+    const toNs = ownMappingValue(mapping.files, rel) ?? ownMappingValue(mapping.namespaces, fromNs);
     if (toNs === undefined) {
       items.push({
         ...base,
