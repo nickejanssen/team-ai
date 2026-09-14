@@ -69,7 +69,33 @@ describe("emitClaudeCode — committed layout options", () => {
     expect(front.name).toBe(agent.def.name);
     expect(front.model).toBeUndefined();
     expect(front.tools).toBe("Read, Grep, Glob");
-    for (const ns of agent.def.kb_namespaces) expect(raw).toContain(`^namespace: ${ns}`);
+    const searchProcedure = raw.indexOf("## Search procedure");
+    const originalInstructions = raw.indexOf("## Original instructions");
+    expect(searchProcedure).toBeGreaterThanOrEqual(0);
+    expect(searchProcedure).toBeLessThan(originalInstructions);
+    expect(raw).toContain(
+      "The knowledge base is the Markdown under the KB root in `team-ai/index.lock`.",
+    );
+    expect(raw).toContain("Use Read, Grep, and Glob");
+    expect(raw).toContain("tool names under Original instructions are unavailable");
+    for (const ns of agent.def.kb_namespaces) {
+      expect(raw).toContain(`search the KB root for \`^namespace: ${ns}\` to list your documents`);
+    }
+  });
+
+  it("writes the router routing procedure before its original instructions", async () => {
+    const input = await loadEmitInput(FIXTURE);
+    const out = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-router-"));
+    emitClaudeCode(input, out, { builtinSearch: true, pluginManifest: false });
+    const router = input.agents.find((a) => a.def.kind === "router")!;
+    const raw = readFileSync(join(out, ".claude/agents", `${router.name}.md`), "utf8");
+
+    expect(raw).toContain("Read `team-ai/manifest.yaml`");
+    expect(raw).toContain("excluding `not_owned`");
+    expect(raw).toContain("at most one hop");
+    expect(raw.indexOf("## Search procedure")).toBeLessThan(
+      raw.indexOf("## Original instructions"),
+    );
   });
 
   it.each(["../", "nested/", "nested\\", "C:\\absolute\\", "/absolute/"])(

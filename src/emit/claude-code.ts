@@ -12,7 +12,7 @@ import { stringify as stringifyYaml } from "yaml";
 
 import { resolveWithin } from "../generator/contain.js";
 import { packageVersion } from "../version.js";
-import type { EmitInput } from "./index.js";
+import type { EmitAgent, EmitInput } from "./index.js";
 
 export interface EmitClaudeCodeOptions {
   filePrefix?: string;
@@ -44,20 +44,33 @@ function write(outDir: string, rel: string, content: string): string {
   return path;
 }
 
-function searchSection(namespaces: string[]): string {
-  const lines = namespaces.map(
-    (ns) =>
-      `- \`${ns}\`: search the KB root for \`^namespace: ${ns}\` to list your documents, then read only those.`,
+function searchSection(agent: EmitAgent): string {
+  const common = [
+    "## Search procedure",
+    "",
+    "The knowledge base is the Markdown under the KB root in `team-ai/index.lock`.",
+    "Use Read, Grep, and Glob to search it. The tool names under Original instructions are unavailable.",
+    "",
+  ];
+  if (agent.def.kind === "router") {
+    return [
+      ...common,
+      "- Read `team-ai/manifest.yaml`.",
+      "- Match keywords and description, excluding `not_owned`.",
+      "- If exactly one domain matches, hand off to its subagent.",
+      "- If none match, search the KB root once. Hand off if the hits' namespace belongs to a domain; otherwise say you don't know and name the likely owner.",
+      "- Make at most one hop.",
+    ].join("\n");
+  }
+
+  const lines = agent.def.kb_namespaces.map(
+    (ns) => `- search the KB root for \`^namespace: ${ns}\` to list your documents`,
   );
   return [
-    "",
-    "## Finding your documents",
-    "",
-    "Your knowledge is the Markdown under the KB root declared in `team-ai/index.lock`. Each document has a `namespace:` front-matter line.",
-    "",
+    ...common,
     ...lines,
     "",
-    "Cite each document by path. If nothing in your namespaces answers the question, say so and name the owner instead of answering from general knowledge.",
+    "Search only those documents. Answer only from them, citing paths. If nothing answers, say so and name the owner.",
   ].join("\n");
 }
 
@@ -72,8 +85,10 @@ function frontMatter(input: EmitInput["agents"][number], opts: EmitClaudeCodeOpt
     kb_namespaces: input.def.kb_namespaces,
     max_hops: input.def.max_hops,
   };
-  const extra = opts.builtinSearch === true ? searchSection(input.def.kb_namespaces) : "";
-  const body = `${input.instructions.trim()}${extra}`.trim();
+  const body =
+    opts.builtinSearch === true
+      ? `${searchSection(input)}\n\n## Original instructions\n\n${input.instructions.trim()}`.trim()
+      : input.instructions.trim();
   return `---\n${stringifyYaml(meta)}---\n\n${body}${body.length > 0 ? "\n" : ""}`;
 }
 
