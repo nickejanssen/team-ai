@@ -46,6 +46,20 @@ describe("parseFrontmatter", () => {
     expect(data.review_by).toBe("2027-03-15");
   });
 
+  it("normalizes CRLF before parsing front matter", () => {
+    const raw = "---\r\nid: operating.docs.x\r\ntitle: X\r\ntags: []\r\n---\r\n\r\n# Body\r\n";
+    const { data, body } = parseFrontmatter(raw);
+    expect(data).toEqual({ id: "operating.docs.x", title: "X", tags: [] });
+    expect(body).not.toContain("\r");
+  });
+
+  it("normalizes bare CR line endings before parsing front matter", () => {
+    const raw = "---\rtitle: X\rtags: []\r---\r\rBody\r";
+    const { data, body } = parseFrontmatter(raw);
+    expect(data).toEqual({ title: "X", tags: [] });
+    expect(body).not.toContain("\r");
+  });
+
   it("returns empty data for a doc with no front matter", () => {
     const { data, body } = parseFrontmatter("# Just a heading\n");
     expect(data).toEqual({});
