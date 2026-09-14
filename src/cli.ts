@@ -200,8 +200,18 @@ export function buildProgram(): Command {
     run: (opts: InitCliOptions): Promise<number> => {
       const { answers, ...rest } = opts;
       const initOpts: init.InitOptions = { ...rest };
-      if (typeof answers === "string") initOpts.answers = loadAnswerFile(answers);
-      return init.run(initOpts);
+      const loaded = typeof answers === "string" ? loadAnswerFile(answers) : undefined;
+      if (loaded) initOpts.answers = loaded.pull;
+      return init.run(initOpts).then((code) => {
+        if (loaded) {
+          for (const key of loaded.unusedKeys()) {
+            console.error(
+              `WARNING: answers file entry '${key}' was never asked (pre-filled or skipped)`,
+            );
+          }
+        }
+        return code;
+      });
     },
   });
 

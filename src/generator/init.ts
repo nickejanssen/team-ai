@@ -40,6 +40,7 @@ import {
   type ReconcilePlan,
 } from "./reconcile.js";
 import { renderTree, type RenderResult } from "./render.js";
+import type { AnswerSource } from "./init-answers.js";
 
 type Strategy = ReconcilePlan["strategy"];
 
@@ -49,7 +50,7 @@ export interface InitOptions {
   dryRun?: boolean;
   resume?: boolean;
   onConflict?: Strategy;
-  answers?: () => Promise<string>;
+  answers?: AnswerSource;
   preflightTarget?: string;
   output?: (s: string) => void;
 }
@@ -90,12 +91,12 @@ function summary(result: RenderResult, output: (s: string) => void): void {
 
 async function chooseStrategy(
   promptText: string,
-  answers: (() => Promise<string>) | undefined,
+  answers: AnswerSource | undefined,
   output: (s: string) => void,
 ): Promise<Strategy> {
   output(promptText);
   if (answers) {
-    return parseStrategy(await answers()) ?? "adopt-existing";
+    return parseStrategy(await answers("reconcile.strategy")) ?? "adopt-existing";
   }
   const picked = await select<Strategy>({
     message: "How should team-ai lay itself down here?",

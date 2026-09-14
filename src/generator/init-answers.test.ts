@@ -1,54 +1,61 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { loadAnswerFile, parseAnswerList } from "./init-answers.js";
+import { loadAnswerFile } from "./init-answers.js";
 
-function tmpFile(name: string, content: string): string {
+const dirs: string[] = [];
+
+function file(content: string): string {
   const dir = mkdtempSync(join(tmpdir(), "team-ai-answers-"));
-  const path = join(dir, name);
+  dirs.push(dir);
+  const path = join(dir, "answers.yaml");
   writeFileSync(path, content, "utf8");
   return path;
 }
 
-describe("parseAnswerList", () => {
-  it("reads a YAML list of strings in order", () => {
-    expect(parseAnswerList("- extend\n- instance\n- arcwright\n", "x.yaml")).toEqual([
-      "extend",
-      "instance",
-      "arcwright",
-    ]);
+afterEach(() => {
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+describe("loadAnswerFile — keyed", () => {
+  it("answers by key in any order and joins arrays", async () => {
+    const answers = loadAnswerFile(
+      file("team.name: Acme\nagents.personas: [a, b]\ngate.1: confirm\n"),
+    );
+    expect(await answers.pull("gate.1")).toBe("confirm");
+    expect(await answers.pull("agents.personas")).toBe("a,b");
+    expect(await answers.pull("team.name")).toBe("Acme");
   });
 
-  it("reads a JSON array (JSON is valid YAML)", () => {
-    expect(parseAnswerList('["a", "b"]', "x.json")).toEqual(["a", "b"]);
+  it("rejects a key with no entry, naming it", async () => {
+    const answers = loadAnswerFile(file("team.name: Acme\n"));
+    await expect(answers.pull("team.size")).rejects.toThrow(/team\.size/);
   });
 
-  it("coerces scalar entries to strings and keeps an explicit empty string", () => {
-    expect(parseAnswerList('- "yes"\n- 4\n- ""\n', "x.yaml")).toEqual(["yes", "4", ""]);
+  it("rejects a repeated request for the same key", async () => {
+    const answers = loadAnswerFile(file("team.size: nonsense\n"));
+    await answers.pull("team.size");
+    await expect(answers.pull("team.size")).rejects.toThrow(/not accepted/);
   });
 
-  it("rejects a non-list top level", () => {
-    expect(() => parseAnswerList("key: value\n", "x.yaml")).toThrow(/top-level list/);
+  it("rejects control words at load time", () => {
+    expect(() => loadAnswerFile(file("team.name: back\n"))).toThrow(/control word/);
   });
 
-  it("rejects a null entry", () => {
-    expect(() => parseAnswerList("- a\n- null\n", "x.yaml")).toThrow(/entry 1 is null/);
+  it("reports entries that were never requested", async () => {
+    const answers = loadAnswerFile(file("team.name: Acme\nunused.key: x\n"));
+    await answers.pull("team.name");
+    expect(answers.unusedKeys()).toEqual(["unused.key"]);
   });
 });
 
-describe("loadAnswerFile", () => {
-  it("yields entries in order", async () => {
-    const pull = loadAnswerFile(tmpFile("a.yaml", "- one\n- two\n"));
-    expect(await pull()).toBe("one");
-    expect(await pull()).toBe("two");
-  });
-
-  it("rejects with 'answer file exhausted' when over-pulled", async () => {
-    const pull = loadAnswerFile(tmpFile("a.yaml", "- only\n"));
-    expect(await pull()).toBe("only");
-    await expect(pull()).rejects.toThrow(/answer file exhausted/);
+describe("loadAnswerFile — positional", () => {
+  it("still replays a list in order", async () => {
+    const answers = loadAnswerFile(file("- one\n- two\n"));
+    expect(await answers.pull("anything")).toBe("one");
+    expect(await answers.pull("anything")).toBe("two");
   });
 });

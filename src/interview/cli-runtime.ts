@@ -16,12 +16,13 @@ import { loadBank } from "./bank.js";
 import { Engine, type EngineState } from "./engine.js";
 import { renderGate } from "./gates.js";
 import type { Question } from "./types.js";
+import type { AnswerSource } from "../generator/init-answers.js";
 
 const RESUME_FILE = ".team-ai-interview-state.json";
 
 export interface CliRuntimeOptions {
   cwd: string;
-  answers?: () => Promise<string>;
+  answers?: AnswerSource;
   output?: (line: string) => void;
 }
 
@@ -69,8 +70,8 @@ export async function runInterviewCli(opts: CliRuntimeOptions): Promise<EngineSt
   const output = opts.output ?? ((line: string): void => console.log(line));
   const engine = new Engine(loadBank());
 
-  const pull = async (question: Question | null): Promise<string> => {
-    if (opts.answers) return opts.answers();
+  const pull = async (key: string, question: Question | null): Promise<string> => {
+    if (opts.answers) return opts.answers(key);
     return question ? inquireQuestion(question) : inquireGate();
   };
 
@@ -83,7 +84,7 @@ export async function runInterviewCli(opts: CliRuntimeOptions): Promise<EngineSt
   const handleQuestion = async (question: Question): Promise<StepResult> => {
     for (;;) {
       printQuestion(output, question);
-      const raw = (await pull(question)).trim();
+      const raw = (await pull(question.id, question)).trim();
       const word = raw.toLowerCase();
 
       if (word === "back") {
@@ -120,7 +121,7 @@ export async function runInterviewCli(opts: CliRuntimeOptions): Promise<EngineSt
   const handleGate = async (gate: 1 | 2 | 3): Promise<StepResult> => {
     for (;;) {
       output(renderGate(gate, engine));
-      const word = (await pull(null)).trim().toLowerCase();
+      const word = (await pull(`gate.${gate}`, null)).trim().toLowerCase();
 
       if (word === "confirm" || word === "y" || word === "yes") {
         engine.confirmGate(gate);
