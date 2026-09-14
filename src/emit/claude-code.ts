@@ -21,6 +21,19 @@ export interface EmitClaudeCodeOptions {
 }
 
 const BUILTIN_SEARCH_TOOLS = ["Read", "Grep", "Glob"];
+const INVALID_FILE_PREFIX = /[<>:"/\\|?*]/;
+
+function validateFilePrefix(filePrefix: string | undefined): void {
+  if (filePrefix === undefined || filePrefix.length === 0) return;
+  if (
+    filePrefix.includes("..") ||
+    filePrefix === "." ||
+    INVALID_FILE_PREFIX.test(filePrefix) ||
+    [...filePrefix].some((char) => char.charCodeAt(0) < 0x20)
+  ) {
+    throw new Error("filePrefix must be a filename-only prefix");
+  }
+}
 
 // Agent names come from instance files a person can edit, so every path is
 // resolved through `resolveWithin` rather than joined blindly.
@@ -69,6 +82,7 @@ export function emitClaudeCode(
   outDir: string,
   opts: EmitClaudeCodeOptions = {},
 ): string[] {
+  validateFilePrefix(opts.filePrefix);
   const written: string[] = [];
 
   for (const agent of input.agents) {

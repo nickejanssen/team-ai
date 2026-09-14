@@ -4,10 +4,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parse as parseYaml } from "yaml";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { emitClaudeCode } from "./claude-code.js";
 import { loadEmitInput } from "./index.js";
+import { run as runEmit } from "../commands/emit.js";
 
 const FIXTURE = fileURLToPath(new URL("./fixtures/instance", import.meta.url));
 
@@ -69,5 +70,33 @@ describe("emitClaudeCode — committed layout options", () => {
     expect(front.model).toBeUndefined();
     expect(front.tools).toBe("Read, Grep, Glob");
     for (const ns of agent.def.kb_namespaces) expect(raw).toContain(`^namespace: ${ns}`);
+  });
+
+  it.each(["../", "nested/", "nested\\", "C:\\absolute\\", "/absolute/"])(
+    "rejects a path-like file prefix: %s",
+    async (filePrefix) => {
+      const input = await loadEmitInput(FIXTURE);
+      const out = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-invalid-prefix-"));
+
+      expect(() => emitClaudeCode(input, out, { filePrefix })).toThrow(
+        "filePrefix must be a filename-only prefix",
+      );
+    },
+  );
+});
+
+describe("team-ai emit", () => {
+  it("suppresses the tracked-output warning with --allow-tracked", async () => {
+    const out = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-tracked-"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      expect(await runEmit({ target: "claude-code", dir: FIXTURE, out, allowTracked: true })).toBe(
+        0,
+      );
+      expect(error).not.toHaveBeenCalledWith(expect.stringContaining("not gitignored"));
+    } finally {
+      error.mockRestore();
+    }
   });
 });
