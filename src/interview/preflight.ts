@@ -139,8 +139,8 @@ async function pickAgentConfigFile(dir: string): Promise<string | undefined> {
 }
 
 async function countKbDocs(dir: string): Promise<number> {
-  const scope = resolveKbScope(dir);
   try {
+    const scope = resolveKbScope(dir);
     return (await loadKb(scope.root, { exclude: scope.exclude })).length;
   } catch (err) {
     // Best effort: a partially-invalid KB still means "a KB exists here".

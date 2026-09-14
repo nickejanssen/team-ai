@@ -35,7 +35,13 @@ async function listMarkdown(dir: string, exclude: string[] = []): Promise<string
 
 export async function run(opts: ValidateCitationsOptions): Promise<number> {
   const root = opts.root ?? ".";
-  const kbScope = resolveKbScope(root);
+  let kbScope: ReturnType<typeof resolveKbScope>;
+  try {
+    kbScope = resolveKbScope(root);
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    return 1;
+  }
   const kbDir = kbScope.root;
   const kbLabel = relative(root, kbDir).split(/[\\/]/).join("/") || ".";
   const agentsDir = join(root, "agents");

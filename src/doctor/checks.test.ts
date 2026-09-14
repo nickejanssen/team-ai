@@ -140,3 +140,18 @@ describe("checkIndexBuilt", () => {
     expect(checkIndexBuilt(dir).ok).toBe(true);
   });
 });
+
+describe("malformed instance index.lock", () => {
+  it("returns failed structure and seed checks instead of throwing", async () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "index.lock"), "driver: ''\n", "utf8");
+
+    const structure = checkRepoStructure(dir);
+    expect(structure.ok).toBe(false);
+    expect(structure.note).toMatch(/invalid index\.lock/);
+
+    const seed = await checkSeedDocuments(dir);
+    expect(seed.ok).toBe(false);
+    expect(seed.note).toMatch(/invalid index\.lock/);
+  });
+});

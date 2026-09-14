@@ -76,6 +76,16 @@ describe("scanPreflight", () => {
     const report = await scanPreflight(dir);
     expect(report.existingAssets.kbDocCount).toBe(3);
   });
+
+  it("treats a malformed index.lock as zero KB documents instead of aborting", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "team-ai-preflight-"));
+    dirs.push(dir);
+    writeFileSync(join(dir, "index.lock"), "driver: ''\n", "utf8");
+
+    await expect(scanPreflight(dir)).resolves.toMatchObject({
+      existingAssets: { kbDocCount: 0 },
+    });
+  });
 });
 
 describe("prepareConnectorProbe", () => {

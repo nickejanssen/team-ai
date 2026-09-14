@@ -78,4 +78,13 @@ describe("validate-citations", () => {
     const printed = error.mock.calls.map((c) => String(c[0])).join("\n");
     expect(printed).toMatch(/docs\/platform\/y\.md: platform\/nope\.md/);
   });
+
+  it("reports a malformed index.lock instead of rejecting", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "team-ai-citations-"));
+    dirs.push(dir);
+    writeFileSync(join(dir, "index.lock"), "driver: ''\n", "utf8");
+
+    await expect(run({ root: dir })).resolves.toBe(1);
+    expect(error.mock.calls.map((c) => String(c[0])).join("\n")).toMatch(/invalid index\.lock/);
+  });
 });

@@ -192,7 +192,12 @@ export function runSelfChecks(repoRoot: string): CheckResult[] {
 
 export function checkRepoStructure(root: string): CheckResult {
   const label = "repo structure";
-  const scope = resolveKbScope(root);
+  let scope: ReturnType<typeof resolveKbScope>;
+  try {
+    scope = resolveKbScope(root);
+  } catch (err) {
+    return fail(label, err instanceof Error ? firstLine(err.message) : String(err));
+  }
   const kbLabel = relative(root, scope.root).split(/[\\/]/).join("/") || ".";
   const hasKb = existsSync(scope.root);
   const hasManifest =
@@ -208,8 +213,8 @@ export function checkRepoStructure(root: string): CheckResult {
 
 export async function checkSeedDocuments(root: string): Promise<CheckResult> {
   const label = "seed documents pass front matter";
-  const scope = resolveKbScope(root);
   try {
+    const scope = resolveKbScope(root);
     const docs = await loadKb(scope.root, { exclude: scope.exclude });
     return pass(label, `${docs.length} doc(s)`);
   } catch (err) {
