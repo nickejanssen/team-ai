@@ -188,6 +188,45 @@ describe("assembleManifest — agents and skills", () => {
     expect(yaml.indexOf("domains:")).toBeLessThan(yaml.indexOf("agents:"));
     expect(yaml.indexOf("agents:")).toBeLessThan(yaml.indexOf("skills:"));
   });
+
+  it("serializes agents and skills sorted by their stable keys", () => {
+    const yaml = serializeManifest({
+      domains: [domain],
+      agents: [
+        { name: "zeta", tier: 1, kind: "router", max_hops: 0, kb_namespaces: [] },
+        { name: "alpha", tier: 1, kind: "router", max_hops: 0, kb_namespaces: [] },
+      ],
+      skills: [
+        { id: "zeta-skill", deterministic: false },
+        { id: "alpha-skill", deterministic: false },
+      ],
+    });
+
+    expect(yaml.indexOf("name: alpha")).toBeLessThan(yaml.indexOf("name: zeta"));
+    expect(yaml.indexOf("id: alpha-skill")).toBeLessThan(yaml.indexOf("id: zeta-skill"));
+  });
+
+  it("reports malformed agents and skills through manifest validation", () => {
+    expect(() =>
+      assembleManifest({
+        fragment: {
+          domains: [domain],
+          agents: [{ tier: 1 }, { tier: 2 }],
+        },
+        spokes: [],
+      }),
+    ).toThrow(/^assembled manifest is invalid:/);
+
+    expect(() =>
+      assembleManifest({
+        fragment: {
+          domains: [domain],
+          skills: [{ deterministic: true }, { deterministic: false }],
+        },
+        spokes: [],
+      }),
+    ).toThrow(/^assembled manifest is invalid:/);
+  });
 });
 
 const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
