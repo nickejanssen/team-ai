@@ -165,6 +165,25 @@ describe("checkManifestInvariants", () => {
     expect(rules(base, d)).toContain("definition-missing");
   });
 
+  it("allows authored persona entries without a definition", () => {
+    const m: Manifest = {
+      ...base,
+      agents: [
+        ...base.agents!,
+        {
+          name: "planner",
+          tier: 2,
+          kind: "persona",
+          max_hops: 0,
+          kb_namespaces: [],
+          source: "authored",
+          path: "docs/agents/planner.md",
+        },
+      ],
+    };
+    expect(rules(m)).toEqual([]);
+  });
+
   it("rejects a manifest agent whose max_hops disagrees", () => {
     const d = new Map(defs);
     d.set("safety-sme", def("safety-sme", { max_hops: 1 }));

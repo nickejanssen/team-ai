@@ -98,7 +98,9 @@ export function checkManifestInvariants(
     }
     const definition = definitions.get(agent.name);
     if (definition === undefined) {
-      push("definition-missing", agent.name, "no agents/<name>.yaml definition");
+      if (!(agent.source === "authored" && agent.path)) {
+        push("definition-missing", agent.name, "no agents/<name>.yaml definition");
+      }
       continue;
     }
     if (
