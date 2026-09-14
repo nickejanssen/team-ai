@@ -7,6 +7,8 @@
 // coding client (that client reads the repo directly).
 
 import { execFile } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -18,12 +20,16 @@ import {
 
 const run = promisify(execFile);
 
-// The repo this server was generated into. `team-ai` reads it via `--root`.
-const ROOT = new URL(".", import.meta.url).pathname.replace(/\/mcp-server\/$/, "");
+// The instance directory this server was generated into.
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+// Absolute path to a local team-ai build's dist/cli.js. team-ai is not published
+// to npm, and the package with that name there is unrelated, so this server
+// only ever runs the local build.
+const CLI = process.env.TEAM_AI_CLI;
 
 // tool name -> argv builder. Every command is read-only and emits JSON or text
-// on stdout; the CLI binary is resolved through `npx` so no global install is
-// required.
+// on stdout.
 const TOOLS = {
   kb_search: {
     description: "Search the knowledge base and return ranked hits with citations.",
@@ -51,18 +57,24 @@ const TOOLS = {
   kb_coverage_gap: {
     description: "List documents flagged as coverage gaps, stale, orphaned, or unowned.",
     inputSchema: { type: "object", properties: {} },
-    argv: () => ["freshness-audit", "--root", `${ROOT}/kb`],
+    argv: () => ["freshness-audit", "--instance", ROOT],
   },
   kb_freshness: {
     description: "Report knowledge-base freshness: stale, orphaned, and unowned documents.",
     inputSchema: { type: "object", properties: {} },
-    argv: () => ["freshness-audit", "--root", `${ROOT}/kb`],
+    argv: () => ["freshness-audit", "--instance", ROOT],
   },
 };
 
 async function callCli(argv) {
+  if (!CLI) {
+    return {
+      ok: false,
+      error: "TEAM_AI_CLI is not set: point it at a local team-ai build's dist/cli.js",
+    };
+  }
   try {
-    const { stdout } = await run("npx", ["--yes", "team-ai", ...argv], {
+    const { stdout } = await run(process.execPath, [CLI, ...argv], {
       cwd: ROOT,
       maxBuffer: 8 * 1024 * 1024,
     });

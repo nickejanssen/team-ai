@@ -37,6 +37,17 @@ describe("templates/mcp-server", () => {
     expect(() => execFileSync("node", ["--check", checkPath])).not.toThrow();
   });
 
+  it("never shells out through npx and resolves the CLI from TEAM_AI_CLI", async () => {
+    const dest = tempDir();
+    await renderTree({ templateDir: MCP_DIR, destDir: dest, context });
+    const server = readFileSync(join(dest, "server.mjs"), "utf8");
+
+    expect(server).not.toMatch(/\bnpx\b/);
+    expect(server).toContain("TEAM_AI_CLI");
+    expect(server).toContain("fileURLToPath");
+    expect(server).toContain('"--instance", ROOT');
+  });
+
   it("renders a package.json that parses with the slug name and stdio bin", async () => {
     const dest = tempDir();
     await renderTree({ templateDir: MCP_DIR, destDir: dest, context });
