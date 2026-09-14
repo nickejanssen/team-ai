@@ -182,7 +182,7 @@ export function buildProgram(): Command {
         .option("--resume", "resume a saved interview instead of starting fresh", false)
         .option(
           "--answers <file>",
-          "ordered YAML/JSON list of answer strings for a non-interactive run",
+          "keyed YAML mapping by question id (legacy positional lists also supported)",
         )
         .addOption(
           new Option(

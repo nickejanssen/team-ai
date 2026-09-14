@@ -12,9 +12,10 @@ function tempCwd(): string {
 }
 
 // A puller backed by a scripted list of lines, consumed in order.
-function scripted(lines: string[]): () => Promise<string> {
+function scripted(lines: string[], keys: string[] = []): (key: string) => Promise<string> {
   let i = 0;
-  return () => {
+  return (key) => {
+    keys.push(key);
     const value = lines[i];
     i += 1;
     if (value === undefined) throw new Error(`puller exhausted after ${lines.length} lines`);
@@ -25,6 +26,7 @@ function scripted(lines: string[]): () => Promise<string> {
 describe("runInterviewCli", () => {
   it("walks the whole interview, honouring why / back / defer and confirming every gate", async () => {
     const out: string[] = [];
+    const keys: string[] = [];
     const lines = [
       "why", // pre.assessment: explain, then re-ask
       "extend", // pre.assessment
@@ -66,7 +68,7 @@ describe("runInterviewCli", () => {
 
     const state: EngineState = await runInterviewCli({
       cwd: tempCwd(),
-      answers: scripted(lines),
+      answers: scripted(lines, keys),
       output: (line) => out.push(line),
     });
 
@@ -81,6 +83,10 @@ describe("runInterviewCli", () => {
       l.startsWith("How should this setup relate to the AI infrastructure"),
     ).length;
     expect(promptCount).toBeGreaterThanOrEqual(2);
+    expect(keys).toContain("pre.assessment");
+    expect(keys).toContain("gate.1");
+    expect(keys).toContain("gate.2");
+    expect(keys).toContain("gate.3");
   });
 
   it("writes the resume file and returns partial state on 'save'", async () => {

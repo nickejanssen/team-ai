@@ -25,6 +25,15 @@ function coerce(value: unknown, where: string): string {
   throw new Error(`${where}: every answer must be a string, number, boolean, or list of them`);
 }
 
+function rejectControlWords(value: unknown, where: string): void {
+  if (typeof value === "string" && CONTROL_WORDS.has(value.trim().toLowerCase())) {
+    throw new Error(`${where}: '${value}' is a control word, not an answer`);
+  }
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => rejectControlWords(entry, `${where}[${index}]`));
+  }
+}
+
 export function loadAnswerFile(path: string): LoadedAnswers {
   let parsed: unknown;
   try {
@@ -59,10 +68,8 @@ export function loadAnswerFile(path: string): LoadedAnswers {
 
   const keyed = new Map<string, string>();
   for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    rejectControlWords(value, `${path} key '${key}'`);
     const answer = coerce(value, `${path} key '${key}'`);
-    if (CONTROL_WORDS.has(answer.trim().toLowerCase())) {
-      throw new Error(`${path} key '${key}': '${answer}' is a control word, not an answer`);
-    }
     keyed.set(key, answer);
   }
 

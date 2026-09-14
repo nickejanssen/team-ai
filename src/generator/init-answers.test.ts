@@ -41,8 +41,12 @@ describe("loadAnswerFile — keyed", () => {
     await expect(answers.pull("team.size")).rejects.toThrow(/not accepted/);
   });
 
-  it("rejects control words at load time", () => {
-    expect(() => loadAnswerFile(file("team.name: back\n"))).toThrow(/control word/);
+  it.each(["why", "back", "save"])("rejects control word %s at load time", (word) => {
+    expect(() => loadAnswerFile(file(`team.name: ${word}\n`))).toThrow(/control word/);
+  });
+
+  it("rejects a control word inside an array at load time", () => {
+    expect(() => loadAnswerFile(file("team.name: [Acme, back, writer]\n"))).toThrow(/control word/);
   });
 
   it("reports entries that were never requested", async () => {
