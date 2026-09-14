@@ -330,7 +330,19 @@ export function buildProgram(): Command {
           ]),
         )
         .option("--dir <dir>", "instance directory", ".")
-        .option("--out <dir>", "output directory (should be gitignored)", "emitted");
+        .option("--out <dir>", "output directory (should be gitignored)", "emitted")
+        .option("--file-prefix <prefix>", "prefix for emitted Claude Code agent file names", "")
+        .option("--no-plugin-manifest", "do not write .claude-plugin/plugin.json")
+        .option(
+          "--builtin-search",
+          "give agents Read, Grep, Glob and a namespace lookup section",
+          false,
+        )
+        .option(
+          "--allow-tracked",
+          "emitted output is intentionally committed; skip the gitignore warning",
+          false,
+        );
     },
     run: emit.run,
   });

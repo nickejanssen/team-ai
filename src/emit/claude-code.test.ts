@@ -47,3 +47,27 @@ describe("emitClaudeCode", () => {
     expect(plugin.skills).toEqual(["kb-answer"]);
   });
 });
+
+describe("emitClaudeCode — committed layout options", () => {
+  it("prefixes file names, skips the plugin manifest, and uses built-in search", async () => {
+    const input = await loadEmitInput(FIXTURE);
+    const out = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-opts-"));
+    const written = emitClaudeCode(input, out, {
+      filePrefix: "team-ai-",
+      pluginManifest: false,
+      builtinSearch: true,
+    });
+    expect(written.some((p) => p.endsWith("plugin.json"))).toBe(false);
+    const agent = input.agents[0]!;
+    const raw = readFileSync(join(out, ".claude/agents", `team-ai-${agent.name}.md`), "utf8");
+    const front = parseYaml(/^---\n([\s\S]*?)\n---\n/.exec(raw)?.[1] ?? "") as {
+      name: string;
+      tools: string;
+      model?: string;
+    };
+    expect(front.name).toBe(agent.def.name);
+    expect(front.model).toBeUndefined();
+    expect(front.tools).toBe("Read, Grep, Glob");
+    for (const ns of agent.def.kb_namespaces) expect(raw).toContain(`^namespace: ${ns}`);
+  });
+});

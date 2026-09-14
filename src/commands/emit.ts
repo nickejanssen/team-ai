@@ -18,6 +18,10 @@ export interface EmitCommandOptions {
   target?: string;
   dir?: string;
   out?: string;
+  filePrefix?: string;
+  pluginManifest?: boolean;
+  builtinSearch?: boolean;
+  allowTracked?: boolean;
 }
 
 const TARGETS = ["claude-code", "mcp-only", "generic"] as const;
@@ -55,7 +59,7 @@ export async function run(opts: EmitCommandOptions): Promise<number> {
   const out = opts.out ?? "emitted";
   const outResolved = resolve(dir, out);
 
-  if (!isGitIgnored(dir, outResolved)) {
+  if (opts.allowTracked !== true && !isGitIgnored(dir, outResolved)) {
     console.error(
       `WARNING: ${out} is not gitignored — emitted output is a derived artifact; ` +
         `add '${basename(outResolved)}/' to .gitignore. Continuing.`,
@@ -69,8 +73,13 @@ export async function run(opts: EmitCommandOptions): Promise<number> {
   }
 
   let written: string[];
-  if (target === "claude-code") written = emitClaudeCode(input, outResolved);
-  else if (target === "mcp-only") written = emitMcpOnly(input, outResolved);
+  if (target === "claude-code") {
+    written = emitClaudeCode(input, outResolved, {
+      ...(opts.filePrefix === undefined ? {} : { filePrefix: opts.filePrefix }),
+      ...(opts.pluginManifest === undefined ? {} : { pluginManifest: opts.pluginManifest }),
+      ...(opts.builtinSearch === undefined ? {} : { builtinSearch: opts.builtinSearch }),
+    });
+  } else if (target === "mcp-only") written = emitMcpOnly(input, outResolved);
   else written = emitGeneric(input, outResolved);
 
   for (const path of written) console.log(path);
