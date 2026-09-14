@@ -20,6 +20,7 @@ import * as runEvals from "./commands/run-evals.js";
 import * as search from "./commands/search.js";
 import * as validateCitations from "./commands/validate-citations.js";
 import * as validateKb from "./commands/validate-kb.js";
+import * as validateManifest from "./commands/validate-manifest.js";
 import * as validateSpoke from "./commands/validate-spoke.js";
 import { packageVersion } from "./version.js";
 
@@ -74,6 +75,15 @@ export function buildProgram(): Command {
         .option("--schema-only", "validate front matter only; skip relation checks", false);
     },
     run: validateKb.run,
+  });
+
+  registerCommand(program, {
+    name: "validate-manifest",
+    description: "Check manifest topology invariants against agent definitions",
+    configure: (command) => {
+      command.option("--root <dir>", "instance root directory", ".");
+    },
+    run: validateManifest.run,
   });
 
   registerCommand(program, {
