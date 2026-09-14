@@ -36,7 +36,7 @@ const remap = (kbRoot: string): RemapPlan => ({
 describe("applyRemapPlan", () => {
   it("rewrites only the two values and preserves CRLF, other keys and body", () => {
     const original =
-      "---\r\nid: platform.docs.a\r\nnamespace: platform\r\ntitle: Keep Me\r\n---\r\n\r\nBody stays.\r\n";
+      "---\r\nid: platform.docs.a  \r\nnamespace: platform\t\r\ntitle: Keep Me\r\n---\r\n\r\nBody stays.\r\n";
     const dir = fixture(original);
     applyRemapPlan(remap(dir));
     expect(readFileSync(join(dir, "a.md"), "utf8")).toBe(
@@ -69,5 +69,25 @@ describe("applyRemapPlan", () => {
     });
     expect(() => applyRemapPlan(plan)).toThrow(/conflict/);
     expect(readFileSync(join(dir, "a.md"), "utf8")).toBe(original);
+  });
+
+  it("precomputes every file and writes none when a later source is unsupported", () => {
+    const originalA = "---\nid: platform.docs.a\nnamespace: platform\n---\n";
+    const originalB = "---\nid : platform.docs.b\nnamespace: platform\n---\n";
+    const dir = fixture(originalA);
+    writeFileSync(join(dir, "b.md"), originalB, "utf8");
+    const plan = remap(dir);
+    plan.items.push({
+      path: "b.md",
+      status: "remap",
+      from_namespace: "platform",
+      to_namespace: "alpha",
+      from_id: "platform.docs.b",
+      to_id: "alpha.docs.b",
+    });
+
+    expect(() => applyRemapPlan(plan)).toThrow(/lexical form/);
+    expect(readFileSync(join(dir, "a.md"), "utf8")).toBe(originalA);
+    expect(readFileSync(join(dir, "b.md"), "utf8")).toBe(originalB);
   });
 });

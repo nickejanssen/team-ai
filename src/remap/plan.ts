@@ -1,6 +1,6 @@
 // Deterministic. No model calls. No network. Reads only; writes live in apply.ts.
 
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { hasFrontmatter } from "../adopt/backfill.js";
@@ -30,8 +30,88 @@ export interface RemapPlan {
   items: RemapItem[];
 }
 
-const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
-const QUOTED_OR_COMMENTED = /^(id|namespace):[ \t]*(["']|[^\r\n]*[ \t]#)/m;
+const FRONT_MATTER = /^(---\r?\n)([\s\S]*?)(\r?\n---(?:\r?\n|$))/;
+const ID_VALUE = "[a-z0-9]+(?:\\.[a-z0-9-]+)+";
+const NAMESPACE_VALUE = "[a-z0-9][a-z0-9/-]*";
+const DESTINATION_NAMESPACE = /^[a-z0-9]+$/;
+
+interface ScalarSpan {
+  start: number;
+  end: number;
+  value: string;
+}
+
+export interface RemapScalarSpans {
+  id: ScalarSpan;
+  namespace: ScalarSpan;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validateMappingSection(value: unknown, section: string): Record<string, string> {
+  if (value === undefined) return {};
+  if (!isRecord(value)) {
+    throw new Error(`invalid remap mapping: ${section} must be an object`);
+  }
+
+  const validated: Record<string, string> = {};
+  for (const [key, target] of Object.entries(value)) {
+    if (key.length === 0 || /[\r\n]/.test(key)) {
+      throw new Error(`invalid remap mapping: ${section} contains an invalid key`);
+    }
+    if (typeof target !== "string" || !DESTINATION_NAMESPACE.test(target)) {
+      throw new Error(
+        `invalid remap mapping: ${section}.${key} destination must match ^[a-z0-9]+$`,
+      );
+    }
+    validated[key] = target;
+  }
+  return validated;
+}
+
+export function validateRemapMapping(value: unknown): RemapMapping {
+  if (!isRecord(value)) {
+    throw new Error("invalid remap mapping: expected an object");
+  }
+  const unknown = Object.keys(value).find((key) => key !== "namespaces" && key !== "files");
+  if (unknown !== undefined) {
+    throw new Error(`invalid remap mapping: unknown key '${unknown}'`);
+  }
+  return {
+    namespaces: validateMappingSection(value.namespaces, "namespaces"),
+    files: validateMappingSection(value.files, "files"),
+  };
+}
+
+function findScalarSpan(
+  block: string,
+  blockOffset: number,
+  key: string,
+  valuePattern: string,
+): ScalarSpan | null {
+  const pattern = new RegExp(`^(${key}:[ \\t]+)(${valuePattern})([ \\t]*)(?=\\r?$)`, "gm");
+  const matches = [...block.matchAll(pattern)];
+  if (matches.length !== 1) return null;
+  const match = matches[0];
+  const prefix = match?.[1];
+  const value = match?.[2];
+  if (match?.index === undefined || prefix === undefined || value === undefined) return null;
+  const start = blockOffset + match.index + prefix.length;
+  return { start, end: start + value.length, value };
+}
+
+export function locateRemapScalarSpans(raw: string): RemapScalarSpans | null {
+  const frontMatter = FRONT_MATTER.exec(raw);
+  const open = frontMatter?.[1];
+  const block = frontMatter?.[2];
+  if (frontMatter === null || open === undefined || block === undefined) return null;
+  const blockOffset = open.length;
+  const id = findScalarSpan(block, blockOffset, "id", ID_VALUE);
+  const namespace = findScalarSpan(block, blockOffset, "namespace", NAMESPACE_VALUE);
+  return id === null || namespace === null ? null : { id, namespace };
+}
 
 function walk(dir: string, prefix = ""): string[] {
   const out: string[] = [];
@@ -48,7 +128,8 @@ export function rewriteId(id: string, toNamespace: string): string {
   return dot === -1 ? toNamespace : `${toNamespace}${id.slice(dot)}`;
 }
 
-export function buildRemapPlan(opts: { instance: string; mapping: RemapMapping }): RemapPlan {
+export function buildRemapPlan(opts: { instance: string; mapping: unknown }): RemapPlan {
+  const mapping = validateRemapMapping(opts.mapping);
   const { root, exclude } = resolveKbScope(opts.instance);
   const items: RemapItem[] = [];
   const blank = { from_namespace: "", to_namespace: "", from_id: "", to_id: "" };
@@ -97,17 +178,18 @@ export function buildRemapPlan(opts: { instance: string; mapping: RemapMapping }
       });
       continue;
     }
-    if (QUOTED_OR_COMMENTED.test(FRONT_MATTER.exec(raw)?.[1] ?? "")) {
+    const spans = locateRemapScalarSpans(raw);
+    if (spans === null || spans.id.value !== fromId || spans.namespace.value !== fromNs) {
       items.push({
         ...base,
         status: "conflict",
         to_namespace: "",
         to_id: "",
-        reason: "quoted or commented id/namespace line",
+        reason: "unsupported id/namespace lexical form",
       });
       continue;
     }
-    const toNs = opts.mapping.files[rel] ?? opts.mapping.namespaces[fromNs];
+    const toNs = mapping.files[rel] ?? mapping.namespaces[fromNs];
     if (toNs === undefined) {
       items.push({
         ...base,
@@ -128,9 +210,9 @@ export function buildRemapPlan(opts: { instance: string; mapping: RemapMapping }
   return { kbRoot: root, items };
 }
 
-export function writeInventory(plan: RemapPlan, file: string): void {
+export function formatInventory(plan: RemapPlan): string {
   const lines = plan.items.map((i) =>
     [i.path, i.status, i.from_namespace, i.to_namespace].join("\t"),
   );
-  writeFileSync(file, `path\tstatus\tfrom\tto\n${lines.join("\n")}\n`, "utf8");
+  return `path\tstatus\tfrom\tto\n${lines.join("\n")}\n`;
 }

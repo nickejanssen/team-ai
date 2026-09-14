@@ -7,12 +7,33 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { RemapPlan } from "./plan.js";
+import { locateRemapScalarSpans, type RemapItem, type RemapPlan } from "./plan.js";
 
-const FRONT_MATTER = /^(---\r?\n)([\s\S]*?)(\r?\n---(?:\r?\n|$))/;
+function replaceScalar(raw: string, start: number, end: number, value: string): string {
+  return `${raw.slice(0, start)}${value}${raw.slice(end)}`;
+}
 
-function setScalar(block: string, key: string, value: string): string {
-  return block.replace(new RegExp(`^(${key}:[ \\t]*)[^\\r\\n]*`, "m"), `$1${value}`);
+function renderItem(raw: string, item: RemapItem): string {
+  const spans = locateRemapScalarSpans(raw);
+  if (spans === null) {
+    throw new Error(`refusing to apply: ${item.path} has an unsupported lexical form`);
+  }
+  if (spans.id.value === item.to_id && spans.namespace.value === item.to_namespace) {
+    return raw;
+  }
+  if (spans.id.value !== item.from_id || spans.namespace.value !== item.from_namespace) {
+    throw new Error(`refusing to apply: ${item.path} changed after planning`);
+  }
+
+  const replacements = [
+    { ...spans.id, value: item.to_id },
+    { ...spans.namespace, value: item.to_namespace },
+  ].sort((a, b) => b.start - a.start);
+  let next = raw;
+  for (const replacement of replacements) {
+    next = replaceScalar(next, replacement.start, replacement.end, replacement.value);
+  }
+  return next;
 }
 
 export function applyRemapPlan(plan: RemapPlan): { written: string[] } {
@@ -23,18 +44,17 @@ export function applyRemapPlan(plan: RemapPlan): { written: string[] } {
     );
   }
 
-  const written: string[] = [];
+  const prepared: { path: string; abs: string; content: string }[] = [];
   for (const item of plan.items) {
     if (item.status !== "remap") continue;
     const abs = join(plan.kbRoot, item.path);
     const raw = readFileSync(abs, "utf8");
-    const match = FRONT_MATTER.exec(raw);
-    if (match === null) continue;
-    const [whole, open, block, close] = match as unknown as [string, string, string, string];
-    const next = setScalar(setScalar(block, "namespace", item.to_namespace), "id", item.to_id);
-    if (next === block) continue;
-    writeFileSync(abs, `${open}${next}${close}${raw.slice(whole.length)}`, "utf8");
-    written.push(item.path);
+    const next = renderItem(raw, item);
+    if (next !== raw) prepared.push({ path: item.path, abs, content: next });
   }
-  return { written };
+
+  for (const item of prepared) {
+    writeFileSync(item.abs, item.content, "utf8");
+  }
+  return { written: prepared.map((item) => item.path) };
 }

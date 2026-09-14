@@ -82,4 +82,45 @@ describe("buildRemapPlan", () => {
     expect(plan.items.find((i) => i.path === "u.md")?.status).toBe("conflict");
     expect(plan.items.find((i) => i.path === "q.md")?.status).toBe("conflict");
   });
+
+  it("marks YAML key-spacing variants as conflicts before apply", () => {
+    const { instance: inst, kb } = instance();
+    writeFileSync(
+      join(kb, "spaced.md"),
+      kbDoc("platform", "spaced").replace("id: platform.docs.spaced", "id : platform.docs.spaced"),
+      "utf8",
+    );
+
+    const plan = buildRemapPlan({
+      instance: inst,
+      mapping: { namespaces: { platform: "alpha" }, files: {} },
+    });
+
+    expect(plan.items).toMatchObject([
+      {
+        path: "spaced.md",
+        status: "conflict",
+        reason: "unsupported id/namespace lexical form",
+      },
+    ]);
+  });
+
+  it.each([
+    ["a non-object mapping", null],
+    ["a non-object namespaces section", { namespaces: [], files: {} }],
+    ["a non-object files section", { namespaces: {}, files: [] }],
+    ["an unknown top-level key", { namespace: { platform: "alpha" } }],
+    ["a non-string target", { namespaces: { platform: 42 }, files: {} }],
+    ["an invalid file target", { namespaces: {}, files: { "a.md": "Alpha" } }],
+    ["an empty target", { namespaces: { platform: "" }, files: {} }],
+    ["a newline-containing target", { namespaces: { platform: "alpha\nbeta" }, files: {} }],
+    ["a grammar-invalid target", { namespaces: { platform: "Alpha" }, files: {} }],
+  ])("rejects %s before reading the KB", (_label, mapping) => {
+    expect(() =>
+      buildRemapPlan({
+        instance: join(tmpdir(), "team-ai-remap-missing"),
+        mapping,
+      }),
+    ).toThrow(/invalid remap mapping/);
+  });
 });
