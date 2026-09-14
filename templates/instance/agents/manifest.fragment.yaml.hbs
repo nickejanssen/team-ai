@@ -6,7 +6,7 @@ domains:
   - id: {{slug}}
     description: "TODO: what questions does the {{name}} domain own?"
     keywords: []
-    kb_namespace: {{#if ../namespaces}}{{../namespaces.[0]}}{{else}}operating{{/if}}
+    kb_namespace: {{#if namespace}}{{namespace}}{{else}}{{#if ../namespaces}}{{../namespaces.[0]}}{{else}}operating{{/if}}{{/if}}
     subagent: {{slug}}-sme
     model_tier: small
     owner: {{default ../roles.[0].name "unassigned"}}
