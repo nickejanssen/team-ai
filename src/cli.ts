@@ -16,6 +16,7 @@ import * as review from "./generator/review.js";
 import * as spoke from "./generator/spoke.js";
 import * as upgrade from "./generator/upgrade.js";
 import * as reindex from "./commands/reindex.js";
+import * as remapNamespaces from "./commands/remap-namespaces.js";
 import * as runEvals from "./commands/run-evals.js";
 import * as search from "./commands/search.js";
 import * as validateCitations from "./commands/validate-citations.js";
@@ -115,6 +116,24 @@ export function buildProgram(): Command {
       command.option("--root <dir>", "instance root directory containing kb/", ".");
     },
     run: reindex.run,
+  });
+
+  registerCommand(program, {
+    name: "remap-namespaces",
+    description: "Rewrite KB namespace and id values from a mapping file (proposal unless --apply)",
+    configure: (command) => {
+      command
+        .option(
+          "--instance <dir>",
+          "instance directory whose index.lock declares the KB scope",
+          ".",
+        )
+        .option("--mapping <file>", "YAML mapping: namespaces and per-file overrides")
+        .option("--out <file>", "where to write the proposal", "remap-proposal.yaml")
+        .option("--inventory <file>", "also write a tab-separated inventory")
+        .option("--apply", "write the changes; refuses while any conflict exists", false);
+    },
+    run: remapNamespaces.run,
   });
 
   registerCommand(program, {
