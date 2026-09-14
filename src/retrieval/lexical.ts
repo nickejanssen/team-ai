@@ -46,16 +46,19 @@ interface ChunkMeta extends Record<string, unknown> {
 export interface LexicalAdapterOpts {
   kbRoot: string;
   dbPath?: string;
+  exclude?: string[];
 }
 
 export class LexicalAdapter implements RetrievalAdapter {
   private readonly kbRoot: string;
   private readonly dbPath: string;
+  private readonly exclude: string[];
   private handle: Database.Database | null = null;
 
   constructor(opts: LexicalAdapterOpts) {
     this.kbRoot = opts.kbRoot;
     this.dbPath = opts.dbPath ?? DEFAULT_DB_PATH;
+    this.exclude = opts.exclude ?? [];
   }
 
   private db(): Database.Database {
@@ -81,7 +84,7 @@ export class LexicalAdapter implements RetrievalAdapter {
     const start = performance.now();
     const db = this.db();
 
-    const docs = await loadKb(this.kbRoot);
+    const docs = await loadKb(this.kbRoot, { exclude: this.exclude });
     const chunks = docs.flatMap((doc) => chunkDoc(doc));
 
     // DROP + CREATE + all inserts run in ONE transaction (SQLite DDL is
@@ -183,7 +186,7 @@ export class LexicalAdapter implements RetrievalAdapter {
 
   async get(idOrPath: string, section?: string): Promise<Document> {
     const wantPath = idOrPath.replace(/^kb\//, "");
-    const docs = await loadKb(this.kbRoot);
+    const docs = await loadKb(this.kbRoot, { exclude: this.exclude });
     const doc = docs.find((d) => d.id === idOrPath || d.path === wantPath);
     if (doc === undefined) throw new Error(`no document: ${idOrPath}`);
 

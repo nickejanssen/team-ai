@@ -1,6 +1,6 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -8,6 +8,7 @@ import {
   DEFAULT_INDEX_LOCK,
   lockChanged,
   readIndexLock,
+  resolveKbScope,
   writeIndexLock,
   type IndexLock,
 } from "./index-lock.js";
@@ -198,5 +199,27 @@ describe("lockChanged", () => {
       embedding: { provider: "openai", model: "m", version: "2" },
     };
     expect(lockChanged(a, b)).toBe(true);
+  });
+});
+
+describe("index.lock kb scope", () => {
+  it("resolves the declared KB root and exclusions against the instance directory", () => {
+    const dir = mkdtempSync(join(tmpdir(), "team-ai-lock-"));
+    writeFileSync(
+      join(dir, "index.lock"),
+      "driver: lexical\nchunk:\n  split_on: [h2, h3]\n  target_tokens: 800\n  hard_cap: 1200\nembedding: null\nkb:\n  root: ../docs\n  exclude: [archive/]\n",
+      "utf8",
+    );
+    const scope = resolveKbScope(dir);
+    expect(scope.root).toBe(resolve(dir, "..", "docs"));
+    expect(scope.exclude).toEqual(["archive/"]);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("defaults to <instance>/kb with no exclusions when the lock has no kb block", () => {
+    const dir = mkdtempSync(join(tmpdir(), "team-ai-lock-"));
+    writeIndexLock(dir, DEFAULT_INDEX_LOCK);
+    expect(resolveKbScope(dir)).toEqual({ root: join(dir, "kb"), exclude: [] });
+    rmSync(dir, { recursive: true, force: true });
   });
 });

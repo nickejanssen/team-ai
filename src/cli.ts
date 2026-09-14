@@ -72,6 +72,10 @@ export function buildProgram(): Command {
     configure: (command) => {
       command
         .option("--root <dir>", "knowledge-base root directory", "kb")
+        .option(
+          "--instance <dir>",
+          "instance directory; KB root and exclusions come from its index.lock",
+        )
         .option("--schema-only", "validate front matter only; skip relation checks", false);
     },
     run: validateKb.run,
@@ -130,6 +134,10 @@ export function buildProgram(): Command {
     configure: (command) => {
       command
         .option("--root <dir>", "knowledge-base root directory", "kb")
+        .option(
+          "--instance <dir>",
+          "instance directory; KB root and exclusions come from its index.lock",
+        )
         .option("--fail-on-stale", "exit non-zero when stale documents exist", false)
         .option("--open-issues", "draft GitHub issues for stale docs (dry run only)", false)
         .option("--repo <owner/name>", "target repository for --open-issues live mode")

@@ -1,3 +1,7 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { KbValidationError, loadKb } from "./loader.js";
@@ -76,5 +80,33 @@ describe("loadKb", () => {
   it("returns an empty array for an existing but empty root", async () => {
     const docs = await loadKb("src/kb/fixtures/kb-empty");
     expect(docs).toEqual([]);
+  });
+});
+
+describe("loadKb — exclusions and parse failures", () => {
+  const fm = (id: string): string =>
+    `---\nid: operating.${id}\nnamespace: operating\ntitle: ${id}\nowner: o\nstatus: active\nreview_by: "2027-01-01"\nsensitivity: internal\nsource: authored\ntags: []\nsupersedes: []\n---\n\n# ${id}\n`;
+
+  it("skips excluded subtrees and any-depth basenames", async () => {
+    const root = mkdtempSync(join(tmpdir(), "team-ai-kbx-"));
+    mkdirSync(join(root, "archive"), { recursive: true });
+    mkdirSync(join(root, "skills", "x"), { recursive: true });
+    writeFileSync(join(root, "keep.md"), fm("keep"), "utf8");
+    writeFileSync(join(root, "archive", "old.md"), "no front matter", "utf8");
+    writeFileSync(join(root, "skills", "x", "SKILL.md"), "---\nname: x\n---\n", "utf8");
+    const docs = await loadKb(root, { exclude: ["archive/", "**/SKILL.md"] });
+    expect(docs.map((d) => d.path)).toEqual(["keep.md"]);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("reports an unparseable file as a failure instead of throwing a YAML error", async () => {
+    const root = mkdtempSync(join(tmpdir(), "team-ai-kbp-"));
+    writeFileSync(join(root, "keep.md"), fm("keep"), "utf8");
+    writeFileSync(join(root, "bad.md"), "---\ndescription: a: b: c\n  nested: here\n---\n", "utf8");
+    await expect(loadKb(root)).rejects.toSatisfy(
+      (err: unknown) =>
+        err instanceof KbValidationError && err.failures.some((f) => f.file === "bad.md"),
+    );
+    rmSync(root, { recursive: true, force: true });
   });
 });

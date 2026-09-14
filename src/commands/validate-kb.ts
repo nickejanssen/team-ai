@@ -1,16 +1,21 @@
 import { KbValidationError, loadKb } from "../kb/loader.js";
 import { checkRelations } from "../kb/relations.js";
+import { resolveKbScope } from "../retrieval/index-lock.js";
 
 export interface ValidateKbOptions {
   root?: string;
+  instance?: string;
   schemaOnly?: boolean;
 }
 
 export async function run(opts: ValidateKbOptions): Promise<number> {
-  const root = opts.root ?? "kb";
+  const scope =
+    opts.instance === undefined
+      ? { root: opts.root ?? "kb", exclude: [] }
+      : resolveKbScope(opts.instance);
   const schemaOnly = opts.schemaOnly ?? false;
 
-  const loaded = await load(root);
+  const loaded = await load(scope.root, scope.exclude);
   if (!loaded.ok) {
     for (const line of loaded.errors) console.error(line);
     return 1;
@@ -40,9 +45,9 @@ export async function run(opts: ValidateKbOptions): Promise<number> {
 type LoadOutcome =
   { ok: true; docs: Awaited<ReturnType<typeof loadKb>> } | { ok: false; errors: string[] };
 
-async function load(root: string): Promise<LoadOutcome> {
+async function load(root: string, exclude: string[]): Promise<LoadOutcome> {
   try {
-    return { ok: true, docs: await loadKb(root) };
+    return { ok: true, docs: await loadKb(root, { exclude }) };
   } catch (err) {
     if (err instanceof KbValidationError) {
       return { ok: false, errors: err.failures.map((f) => `${f.file}: ${f.error}`) };
