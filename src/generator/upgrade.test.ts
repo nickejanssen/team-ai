@@ -30,7 +30,7 @@ describe("team-ai upgrade", () => {
     // Stale the index.lock chunk and drop a workflow file.
     writeFileSync(
       join(dir, "index.lock"),
-      "driver: lexical\nchunk:\n  split_on: [h2]\n  target_tokens: 999\n  hard_cap: 1500\nembedding: null\n",
+      "driver: lexical\nchunk:\n  split_on: [h2]\n  target_tokens: 999\n  hard_cap: 1500\nembedding: null\nkb:\n  root: docs\n  exclude: [archive/]\n",
       "utf8",
     );
     rmSync(join(dir, ".github/workflows/validate.yml"));
@@ -43,6 +43,7 @@ describe("team-ai upgrade", () => {
     const lock = readIndexLock(dir);
     expect(lock.chunk).toEqual({ split_on: ["h2", "h3"], target_tokens: 800, hard_cap: 1200 });
     expect(lock.driver).toBe("lexical");
+    expect(lock.kb).toEqual({ root: "docs", exclude: ["archive/"] });
 
     // Content untouched.
     expect(readFileSync(kbPath, "utf8")).toBe(kbBefore);

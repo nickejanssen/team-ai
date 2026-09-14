@@ -1,7 +1,9 @@
-import { readFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { prepareConnectorProbe, scanPreflight } from "./preflight.js";
 import { renderPreflight } from "./preflight-report.js";
@@ -13,6 +15,12 @@ function fixture(name: string): string {
 function source(file: string): string {
   return readFileSync(fileURLToPath(new URL(`./${file}`, import.meta.url)), "utf8");
 }
+
+const dirs: string[] = [];
+
+afterEach(() => {
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
 describe("scanPreflight", () => {
   it("pf-extend: extends an existing harness and adopts AGENTS.md", async () => {
@@ -51,6 +59,22 @@ describe("scanPreflight", () => {
     expect(report.found.agentConfig).toEqual([]);
     expect(report.adoptNote).toBeUndefined();
     expect(report.rationale).toMatch(/stand|contribute/i);
+  });
+
+  it("counts documents from the declared KB root and skips exclusions", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "team-ai-preflight-"));
+    dirs.push(dir);
+    cpSync("src/kb/fixtures/kb", join(dir, "docs"), { recursive: true });
+    mkdirSync(join(dir, "docs", "archive"), { recursive: true });
+    writeFileSync(join(dir, "docs", "archive", "bad.md"), "no front matter", "utf8");
+    writeFileSync(
+      join(dir, "index.lock"),
+      "driver: lexical\nchunk:\n  split_on: [h2, h3]\n  target_tokens: 800\n  hard_cap: 1200\nembedding: null\nkb:\n  root: docs\n  exclude: [archive/]\n",
+      "utf8",
+    );
+
+    const report = await scanPreflight(dir);
+    expect(report.existingAssets.kbDocCount).toBe(3);
   });
 });
 

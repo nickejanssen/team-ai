@@ -200,6 +200,23 @@ describe("lockChanged", () => {
     };
     expect(lockChanged(a, b)).toBe(true);
   });
+
+  it("is true when the KB root changes", () => {
+    const a: IndexLock = { ...clone(base), kb: { root: "kb", exclude: [] } };
+    const b: IndexLock = { ...clone(base), kb: { root: "docs", exclude: [] } };
+    expect(lockChanged(a, b)).toBe(true);
+  });
+
+  it("is true when KB exclusions change", () => {
+    const a: IndexLock = { ...clone(base), kb: { root: "docs", exclude: ["archive/"] } };
+    const b: IndexLock = { ...clone(base), kb: { root: "docs", exclude: ["drafts/"] } };
+    expect(lockChanged(a, b)).toBe(true);
+  });
+
+  it("is false for equal KB scopes", () => {
+    const a: IndexLock = { ...clone(base), kb: { root: "docs", exclude: ["archive/"] } };
+    expect(lockChanged(a, clone(a))).toBe(false);
+  });
 });
 
 describe("index.lock kb scope", () => {

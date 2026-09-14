@@ -182,6 +182,14 @@ export function lockChanged(a: IndexLock, b: IndexLock): boolean {
   if (a.chunk.split_on.length !== b.chunk.split_on.length) return true;
   if (a.chunk.split_on.some((entry, i) => entry !== b.chunk.split_on[i])) return true;
 
+  if (a.kb === undefined || b.kb === undefined) {
+    if (a.kb !== b.kb) return true;
+  } else {
+    if (a.kb.root !== b.kb.root) return true;
+    if (a.kb.exclude.length !== b.kb.exclude.length) return true;
+    if (a.kb.exclude.some((entry, i) => entry !== b.kb?.exclude[i])) return true;
+  }
+
   if (a.embedding === null || b.embedding === null) {
     return a.embedding !== b.embedding;
   }

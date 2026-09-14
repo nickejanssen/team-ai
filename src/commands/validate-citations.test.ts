@@ -1,3 +1,7 @@
+import { cpSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { run } from "./validate-citations.js";
@@ -5,9 +9,12 @@ import { run } from "./validate-citations.js";
 const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
+const dirs: string[] = [];
+
 afterEach(() => {
   log.mockClear();
   error.mockClear();
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
 describe("validate-citations", () => {
@@ -38,5 +45,37 @@ describe("validate-citations", () => {
     expect(code).toBe(1);
     const printed = error.mock.calls.map((c) => String(c[0])).join("\n");
     expect(printed.toLowerCase()).toContain("front matter");
+  });
+
+  it("checks the declared KB root and skips excluded documents", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "team-ai-citations-"));
+    dirs.push(dir);
+    cpSync("src/commands/fixtures/cited-repo-ok", dir, { recursive: true });
+    renameSync(join(dir, "kb"), join(dir, "docs"));
+    mkdirSync(join(dir, "docs", "archive"), { recursive: true });
+    writeFileSync(join(dir, "docs", "archive", "bad.md"), "no front matter", "utf8");
+    writeFileSync(
+      join(dir, "index.lock"),
+      "driver: lexical\nchunk:\n  split_on: [h2, h3]\n  target_tokens: 800\n  hard_cap: 1200\nembedding: null\nkb:\n  root: docs\n  exclude: [archive/]\n",
+      "utf8",
+    );
+
+    expect(await run({ root: dir })).toBe(0);
+  });
+
+  it("labels citation failures with the declared KB root", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "team-ai-citations-"));
+    dirs.push(dir);
+    cpSync("src/commands/fixtures/cited-repo", dir, { recursive: true });
+    renameSync(join(dir, "kb"), join(dir, "docs"));
+    writeFileSync(
+      join(dir, "index.lock"),
+      "driver: lexical\nchunk:\n  split_on: [h2, h3]\n  target_tokens: 800\n  hard_cap: 1200\nembedding: null\nkb:\n  root: docs\n  exclude: []\n",
+      "utf8",
+    );
+
+    expect(await run({ root: dir })).toBe(1);
+    const printed = error.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(printed).toMatch(/docs\/platform\/y\.md: platform\/nope\.md/);
   });
 });

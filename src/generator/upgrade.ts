@@ -113,6 +113,9 @@ export async function run(opts: UpgradeOptions): Promise<number> {
       hard_cap: DEFAULT_INDEX_LOCK.chunk.hard_cap,
     },
     embedding: currentLock.embedding,
+    ...(currentLock.kb
+      ? { kb: { root: currentLock.kb.root, exclude: [...currentLock.kb.exclude] } }
+      : {}),
   };
   const lockUpdated = lockChanged(currentLock, nextLock);
   if (lockUpdated) writeIndexLock(dir, nextLock);

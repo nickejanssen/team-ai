@@ -12,13 +12,14 @@
 // (the CLI decides; these functions only report).
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 
 import { parse as parseYaml } from "yaml";
 
 import { parseDenylist } from "../commands/check-agnostic.js";
 import { DEFAULT_GATES } from "../evals/run.js";
 import { loadKb } from "../kb/loader.js";
+import { resolveKbScope } from "../retrieval/index-lock.js";
 import { loadValidator, type SchemaName } from "../schema/load.js";
 import { validate } from "../schema/validate.js";
 
@@ -191,22 +192,25 @@ export function runSelfChecks(repoRoot: string): CheckResult[] {
 
 export function checkRepoStructure(root: string): CheckResult {
   const label = "repo structure";
-  const hasKb = existsSync(join(root, "kb"));
+  const scope = resolveKbScope(root);
+  const kbLabel = relative(root, scope.root).split(/[\\/]/).join("/") || ".";
+  const hasKb = existsSync(scope.root);
   const hasManifest =
     existsSync(join(root, "manifest.yaml")) ||
     existsSync(join(root, "agents", "manifest.fragment.yaml"));
   if (hasKb && hasManifest) return pass(label);
 
   const missing: string[] = [];
-  if (!hasKb) missing.push("kb/");
+  if (!hasKb) missing.push(`${kbLabel}/`);
   if (!hasManifest) missing.push("manifest.yaml or agents/manifest.fragment.yaml");
   return fail(label, `missing ${missing.join(", ")}`);
 }
 
 export async function checkSeedDocuments(root: string): Promise<CheckResult> {
   const label = "seed documents pass front matter";
+  const scope = resolveKbScope(root);
   try {
-    const docs = await loadKb(join(root, "kb"));
+    const docs = await loadKb(scope.root, { exclude: scope.exclude });
     return pass(label, `${docs.length} doc(s)`);
   } catch (err) {
     return fail(label, err instanceof Error ? firstLine(err.message) : String(err));

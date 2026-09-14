@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -98,6 +98,22 @@ describe("instance checks — complete fixture", () => {
     expect(checkIndexBuilt(COMPLETE).ok).toBe(false);
     expect(checkMcpTokenMinted().ok).toBe(false);
     expect(checkConnectorRegistered().ok).toBe(false);
+  });
+
+  it("accepts the declared KB root and skips excluded documents", async () => {
+    const dir = tmp();
+    cpSync(COMPLETE, dir, { recursive: true });
+    renameSync(join(dir, "kb"), join(dir, "docs"));
+    mkdirSync(join(dir, "docs", "archive"), { recursive: true });
+    writeFileSync(join(dir, "docs", "archive", "bad.md"), "no front matter", "utf8");
+    writeFileSync(
+      join(dir, "index.lock"),
+      "driver: lexical\nchunk:\n  split_on: [h2, h3]\n  target_tokens: 800\n  hard_cap: 1200\nembedding: null\nkb:\n  root: docs\n  exclude: [archive/]\n",
+      "utf8",
+    );
+
+    expect(checkRepoStructure(dir).ok).toBe(true);
+    expect((await checkSeedDocuments(dir)).ok).toBe(true);
   });
 });
 
