@@ -83,6 +83,59 @@ describe("frontmatter schema", () => {
   });
 });
 
+describe("manifest — topology fields", () => {
+  const domain = {
+    id: "knowledge-graph",
+    description: "Who knows what, when, and from whom.",
+    keywords: ["knowledge state"],
+    kb_namespace: "knowledge-graph",
+    subagent: "knowledge-graph-sme",
+    model_tier: "small",
+    owner: "owner-a",
+  };
+
+  it("accepts group, authority, not_owned and depends_on", () => {
+    const result = validate("manifest", {
+      domains: [
+        {
+          ...domain,
+          group: "engine",
+          authority: "canonical",
+          not_owned: ["character personality"],
+          depends_on: ["arc-execution"],
+        },
+      ],
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects an authority outside the enum", () => {
+    expect(validate("manifest", { domains: [{ ...domain, authority: "definitive" }] }).ok).toBe(
+      false,
+    );
+  });
+
+  it("accepts agents and skills sections, and still accepts neither", () => {
+    expect(
+      validate("manifest", {
+        domains: [domain],
+        agents: [
+          {
+            name: "sme",
+            tier: 1,
+            kind: "router",
+            max_hops: 2,
+            kb_namespaces: [],
+            source: "generated",
+          },
+        ],
+        skills: [{ id: "freshness-sweep", deterministic: true, script: "scripts/freshness" }],
+      }).ok,
+    ).toBe(true);
+    expect(validate("manifest", { domains: [domain] }).ok).toBe(true);
+  });
+});
+
 describe("agent schema", () => {
   it("enforces model_tier enum and max_hops >= 0", () => {
     const bad = validate("agent", {

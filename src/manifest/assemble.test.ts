@@ -149,6 +149,47 @@ describe("serializeManifest", () => {
   });
 });
 
+describe("assembleManifest — agents and skills", () => {
+  const domain = {
+    id: "safety",
+    description: "Engine-layer content safety.",
+    keywords: ["safety"],
+    kb_namespace: "safety",
+    subagent: "safety-sme",
+    model_tier: "small" as const,
+    owner: "owner-a",
+  };
+
+  it("passes agents and skills through, sorted", () => {
+    const result = assembleManifest({
+      fragment: {
+        domains: [domain],
+        agents: [
+          { name: "safety-sme", tier: 3, kind: "subagent", max_hops: 0, kb_namespaces: ["safety"] },
+          { name: "sme", tier: 1, kind: "router", max_hops: 2, kb_namespaces: [] },
+        ],
+        skills: [
+          { id: "kb-contribute", deterministic: false },
+          { id: "kb-answer", deterministic: false },
+        ],
+      },
+      spokes: [],
+    });
+    expect(result.agents?.map((a) => a.name)).toEqual(["safety-sme", "sme"]);
+    expect(result.skills?.map((s) => s.id)).toEqual(["kb-answer", "kb-contribute"]);
+  });
+
+  it("serializes domains, then agents, then skills", () => {
+    const yaml = serializeManifest({
+      domains: [domain],
+      agents: [{ name: "sme", tier: 1, kind: "router", max_hops: 2, kb_namespaces: [] }],
+      skills: [{ id: "kb-answer", deterministic: false }],
+    });
+    expect(yaml.indexOf("domains:")).toBeLessThan(yaml.indexOf("agents:"));
+    expect(yaml.indexOf("agents:")).toBeLessThan(yaml.indexOf("skills:"));
+  });
+});
+
 const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
 const dirs: string[] = [];
