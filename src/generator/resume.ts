@@ -26,6 +26,7 @@ import { stateFromProfile, type ProfileShape } from "./state-from-profile.js";
 
 export interface ResumeOptions {
   dir?: string;
+  catalog?: string;
   answers?: () => Promise<string>;
   output?: (s: string) => void;
 }
@@ -145,7 +146,10 @@ export async function run(opts: ResumeOptions): Promise<number> {
 
   const priorManifest = readGeneratedManifest(dir);
   const priorByPath = new Map<string, string>(priorManifest.map((e) => [e.path, e.sha256]));
-  const context = buildContext(engine);
+  const context = buildContext(
+    engine,
+    opts.catalog !== undefined ? { instanceCatalogDir: opts.catalog } : {},
+  );
   const exclude = computeExclude(context.seed === true, false);
 
   // `writeOutputs` rewrites the interview docs and the profile, but not the

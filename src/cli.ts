@@ -177,6 +177,7 @@ export function buildProgram(): Command {
     configure: (command) => {
       command
         .option("--dir <dir>", "target directory to generate into", ".")
+        .option("--catalog <dir>", "instance catalog directory layered over the framework catalog")
         .option("--dry-run", "classify what would be written; write nothing", false)
         .option("--resume", "resume a saved interview instead of starting fresh", false)
         .option(
@@ -251,7 +252,9 @@ export function buildProgram(): Command {
     name: "resume",
     description: "Re-open a saved interview and ask only the newly relevant questions",
     configure: (command) => {
-      command.option("--dir <dir>", "instance directory containing team-profile.yaml", ".");
+      command
+        .option("--dir <dir>", "instance directory containing team-profile.yaml", ".")
+        .option("--catalog <dir>", "instance catalog directory layered over the framework catalog");
     },
     run: resume.run,
   });
@@ -270,7 +273,9 @@ export function buildProgram(): Command {
     description:
       "Refresh the framework plumbing (CI, eval gates, SETUP, index.lock chunk) in place",
     configure: (command) => {
-      command.option("--dir <dir>", "instance directory containing team-profile.yaml", ".");
+      command
+        .option("--dir <dir>", "instance directory containing team-profile.yaml", ".")
+        .option("--catalog <dir>", "instance catalog directory layered over the framework catalog");
     },
     run: upgrade.run,
   });

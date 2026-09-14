@@ -45,6 +45,7 @@ type Strategy = ReconcilePlan["strategy"];
 
 export interface InitOptions {
   dir?: string;
+  catalog?: string;
   dryRun?: boolean;
   resume?: boolean;
   onConflict?: Strategy;
@@ -110,6 +111,7 @@ export async function run(opts: InitOptions): Promise<number> {
   if (opts.resume === true) {
     if (existsSync(join(dir, "team-profile.yaml"))) {
       const resumeOpts: Parameters<typeof resume.run>[0] = { dir };
+      if (opts.catalog !== undefined) resumeOpts.catalog = opts.catalog;
       if (opts.answers !== undefined) resumeOpts.answers = opts.answers;
       if (opts.output !== undefined) resumeOpts.output = opts.output;
       return resume.run(resumeOpts);
@@ -134,7 +136,10 @@ export async function run(opts: InitOptions): Promise<number> {
   }
 
   const engine = Engine.load(loadBank(), state);
-  const context = buildContext(engine);
+  const context = buildContext(
+    engine,
+    opts.catalog !== undefined ? { instanceCatalogDir: opts.catalog } : {},
+  );
   const seed = context.seed === true;
   const hosting = str(context.hosting, "no-server");
   const exclude = computeExclude(seed, standDown);

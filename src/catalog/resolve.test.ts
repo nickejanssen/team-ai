@@ -1,5 +1,10 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
+import { loadCatalog } from "../interview/gates.js";
 import { resolveCatalog } from "./resolve.js";
 
 const TOOLKIT = "src/catalog/fixtures/toolkit";
@@ -60,5 +65,28 @@ describe("resolveCatalog — shipped toolkit presets", () => {
   it("marks every shipped entry as toolkit origin", () => {
     for (const item of catalog.roles.values()) expect(item.origin).toBe("toolkit");
     for (const item of catalog.skills.values()) expect(item.origin).toBe("toolkit");
+  });
+});
+
+describe("loadCatalog with an instance layer", () => {
+  it("resolves a preset that exists only in the instance catalog, keyed by filename stem", () => {
+    const dir = mkdtempSync(join(tmpdir(), "team-ai-cat-"));
+    mkdirSync(join(dir, "namespaces"), { recursive: true });
+    const seeds = ["a", "b", "c", "d", "e"]
+      .map((n) => `  - path: ${n}.md\n    title: ${n}\n    purpose: seed ${n}`)
+      .join("\n");
+    writeFileSync(
+      join(dir, "namespaces", "custom.yaml"),
+      `name: named-differently\ndescription: x\nsecond_level:\n  - alpha\n  - beta\ndomain_dir: null\nseed_docs:\n${seeds}\n`,
+      "utf8",
+    );
+    const catalog = loadCatalog(dir);
+    expect(catalog?.namespaces.get("custom")?.value.second_level).toEqual(["alpha", "beta"]);
+    expect(catalog?.namespaces.get("named-differently")).toBeUndefined();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("ignores a missing instance directory", () => {
+    expect(loadCatalog(join(tmpdir(), "team-ai-no-such-catalog"))).not.toBeNull();
   });
 });

@@ -48,7 +48,9 @@ export function buildContext(
   extra: BuildContextExtra = {},
 ): Record<string, unknown> {
   const eff = engine.effectiveAnswers();
-  const catalog = loadCatalog();
+  const catalogDir =
+    typeof extra.instanceCatalogDir === "string" ? extra.instanceCatalogDir : undefined;
+  const catalog = loadCatalog(catalogDir);
   const { today, ...rest } = extra;
 
   const name = asString(eff["team.name"]);

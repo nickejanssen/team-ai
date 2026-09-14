@@ -30,6 +30,7 @@ import { stateFromProfile, type ProfileShape } from "./state-from-profile.js";
 
 export interface UpgradeOptions {
   dir?: string;
+  catalog?: string;
   output?: (s: string) => void;
 }
 
@@ -85,7 +86,10 @@ export async function run(opts: UpgradeOptions): Promise<number> {
 
   const bank = loadBank();
   const engine = Engine.load(bank, stateFromProfile(bank, profile.shape));
-  const context = buildContext(engine);
+  const context = buildContext(
+    engine,
+    opts.catalog !== undefined ? { instanceCatalogDir: opts.catalog } : {},
+  );
 
   const priorManifest = readGeneratedManifest(dir);
   const result = await renderTree({

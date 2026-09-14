@@ -149,9 +149,13 @@ function renderGate2(engine: Engine): string {
   return render("architecture.hbs", { driver, hosting, fileTreeNote });
 }
 
-export function loadCatalog(): ResolvedCatalog | null {
+export function loadCatalog(instanceDir?: string): ResolvedCatalog | null {
   try {
-    return resolveCatalog({ toolkitDir: CATALOG_DIR });
+    return resolveCatalog(
+      instanceDir === undefined
+        ? { toolkitDir: CATALOG_DIR }
+        : { toolkitDir: CATALOG_DIR, instanceDir },
+    );
   } catch {
     return null;
   }
