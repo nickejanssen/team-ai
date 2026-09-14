@@ -25,14 +25,18 @@ function readTemplate(rel: string): string {
   return readFileSync(join(TEMPLATES_INSTANCE, rel), "utf8");
 }
 
-function asDomains(value: unknown): { slug: string; name: string }[] {
+function asDomains(value: unknown): { slug: string; name: string; namespace?: string }[] {
   if (!Array.isArray(value)) return [];
-  const out: { slug: string; name: string }[] = [];
+  const out: { slug: string; name: string; namespace?: string }[] = [];
   for (const item of value) {
     if (item !== null && typeof item === "object") {
       const rec = item as Record<string, unknown>;
       if (typeof rec.slug === "string" && typeof rec.name === "string") {
-        out.push({ slug: rec.slug, name: rec.name });
+        out.push({
+          slug: rec.slug,
+          name: rec.name,
+          ...(typeof rec.namespace === "string" ? { namespace: rec.namespace } : {}),
+        });
       }
     }
   }
@@ -129,7 +133,7 @@ export function renderEntityFiles(
       ...context,
       slug: domain.slug,
       name: domain.name,
-      namespace: firstNamespace,
+      namespace: domain.namespace ?? firstNamespace,
       escalate_to: "unassigned",
     };
     const yaml = renderTemplate(domainYaml, ctx, `agents/${domain.slug}-sme.yaml`);

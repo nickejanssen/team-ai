@@ -21,6 +21,7 @@ interface TeamBlock {
 interface DomainBlock {
   slug: string;
   name: string;
+  namespace: string;
 }
 
 function asString(value: unknown, fallback = ""): string {
@@ -75,10 +76,14 @@ export function buildContext(
         .map((r) => catalog?.roles.get(r)?.value)
         .filter((r): r is RoleArchetype => r !== undefined);
 
-  const domains: DomainBlock[] = parseDomains(eff["agents.domains"]).map((d) => ({
-    slug: slug(d),
-    name: d,
-  }));
+  const domains: DomainBlock[] = parseDomains(eff["agents.domains"]).map((d) => {
+    const s = slug(d);
+    return {
+      slug: s,
+      name: d,
+      namespace: namespaces.includes(s) ? s : (namespaces[0] ?? "operating"),
+    };
+  });
 
   const personaList = asStringArray(eff["agents.personas"]).filter((p) => p !== "custom");
   const personas = personaList.length > 0 ? personaList : ["internal-technical"];

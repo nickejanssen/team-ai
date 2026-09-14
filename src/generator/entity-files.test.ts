@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -79,5 +79,32 @@ describe("renderEntityFiles — path containment", () => {
       ),
     ).toThrow(/role name/);
     expect(readdirSync(dir)).toEqual([]);
+  });
+});
+
+describe("renderEntityFiles — per-domain namespace", () => {
+  it("scopes each domain SME to its own namespace", () => {
+    const dir = tmp();
+    renderEntityFiles(
+      {
+        namespaces: ["alpha", "beta"],
+        domains: [
+          { slug: "alpha", name: "Alpha", namespace: "alpha" },
+          { slug: "beta", name: "Beta", namespace: "beta" },
+        ],
+        roles: [],
+        personas: [],
+      },
+      dir,
+      new Map(),
+      "siblings",
+      emptyResult(),
+    );
+    expect(readFileSync(join(dir, "agents/alpha-sme.yaml"), "utf8")).toContain(
+      "kb_namespaces: [alpha]",
+    );
+    expect(readFileSync(join(dir, "agents/beta-sme.yaml"), "utf8")).toContain(
+      "kb_namespaces: [beta]",
+    );
   });
 });
