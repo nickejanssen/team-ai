@@ -26,18 +26,10 @@ See [`SETUP.md`](SETUP.md).
 
 ## Day to day
 
-The `team-ai` CLI is built from source and is not published to npm. Under Node
-22, clone the framework, install its dependencies, build it, and link the CLI
-locally. See the team-ai README for details.
-
-```bash
-git clone https://github.com/nickejanssen/team-ai.git
-cd team-ai
-npm ci
-npm run build
-npm link
-```
-
+These commands use the team-ai CLI built from source. It is not published to
+npm, so install it by cloning github.com/nickejanssen/team-ai and running
+`npm ci`, `npm run build`, and `npm link` under Node 22. See that repository's
+README.
 ```bash
 team-ai validate-kb            # front matter + relations
 team-ai assemble-manifest      # rebuild manifest.yaml from the fragment
