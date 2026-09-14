@@ -31,6 +31,16 @@ export function checkManifestInvariants(
     out.push({ rule, subject, message });
   };
 
+  for (const [filenameStem, definition] of definitions) {
+    if (definition.name !== filenameStem) {
+      push(
+        "definition-name-mismatch",
+        filenameStem,
+        `definition name '${definition.name}' does not match filename '${filenameStem}.yaml'`,
+      );
+    }
+  }
+
   const routers = agents.filter((a) => a.kind === "router");
   if (routers.length !== 1) {
     push("one-router", "agents", `expected exactly one router, found ${routers.length}`);

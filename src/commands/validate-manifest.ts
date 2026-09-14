@@ -32,7 +32,7 @@ export async function run(opts: ValidateManifestOptions): Promise<number> {
   }
 
   const input = await loadEmitInput(root);
-  const definitions = new Map<string, AgentDef>(input.agents.map((a) => [a.def.name, a.def]));
+  const definitions = new Map<string, AgentDef>(input.agents.map((a) => [a.name, a.def]));
   const violations = checkManifestInvariants(result.value, definitions);
   for (const v of violations) console.error(`${v.subject}: [${v.rule}] ${v.message}`);
   if (violations.length > 0) return 1;

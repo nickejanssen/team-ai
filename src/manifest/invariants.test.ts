@@ -64,6 +64,30 @@ describe("checkManifestInvariants", () => {
     expect(rules(base)).toEqual([]);
   });
 
+  it("rejects a topology without a router", () => {
+    const m: Manifest = {
+      ...base,
+      agents: base.agents!.map((a) => (a.kind === "router" ? { ...a, kind: "subagent" } : a)),
+    };
+    expect(rules(m)).toContain("one-router");
+  });
+
+  it("rejects a topology with multiple routers", () => {
+    const m: Manifest = {
+      ...base,
+      agents: [
+        ...base.agents!,
+        { name: "other-router", tier: 2, kind: "router", max_hops: 1, kb_namespaces: [] },
+      ],
+    };
+    const d = new Map(defs);
+    d.set(
+      "other-router",
+      def("other-router", { kind: "router", model_tier: "none", max_hops: 1, kb_namespaces: [] }),
+    );
+    expect(rules(m, d)).toContain("one-router");
+  });
+
   it("requires the router definition to make no model call", () => {
     const d = new Map(defs);
     d.set(
@@ -73,13 +97,26 @@ describe("checkManifestInvariants", () => {
     expect(rules(base, d)).toContain("router-model-tier");
   });
 
-  it("requires tier-3 agents to be terminal with one namespace", () => {
+  it("requires tier-3 agents to be terminal", () => {
     const m: Manifest = {
       ...base,
       agents: base.agents!.map((a) => (a.tier === 3 ? { ...a, max_hops: 1 } : a)),
     };
     expect(rules(m)).toContain("specialist-terminal");
   });
+
+  it.each([{ kb_namespaces: [] }, { kb_namespaces: ["safety", "other"] }])(
+    "requires tier-3 agents to have exactly one namespace: $kb_namespaces",
+    ({ kb_namespaces }) => {
+      const m: Manifest = {
+        ...base,
+        agents: base.agents!.map((a) => (a.tier === 3 ? { ...a, kb_namespaces } : a)),
+      };
+      const d = new Map(defs);
+      d.set("safety-sme", def("safety-sme", { kb_namespaces }));
+      expect(rules(m, d)).toContain("specialist-terminal");
+    },
+  );
 
   it("rejects two specialists sharing a namespace", () => {
     const m: Manifest = {
@@ -102,7 +139,39 @@ describe("checkManifestInvariants", () => {
     expect(rules(m)).toEqual(expect.arrayContaining(["domain-subagent", "escalate-to"]));
   });
 
-  it("rejects a manifest agent whose definition disagrees", () => {
+  it("rejects an unresolved agent escalation", () => {
+    const m: Manifest = {
+      ...base,
+      agents: base.agents!.map((a) =>
+        a.name === "safety-sme" ? { ...a, escalate_to: "missing-sme" } : a,
+      ),
+    };
+    expect(rules(m)).toContain("escalate-to");
+  });
+
+  it("allows an agent to escalate to unassigned", () => {
+    const m: Manifest = {
+      ...base,
+      agents: base.agents!.map((a) =>
+        a.name === "safety-sme" ? { ...a, escalate_to: "unassigned" } : a,
+      ),
+    };
+    expect(rules(m)).toEqual([]);
+  });
+
+  it("rejects a manifest agent without a definition", () => {
+    const d = new Map(defs);
+    d.delete("safety-sme");
+    expect(rules(base, d)).toContain("definition-missing");
+  });
+
+  it("rejects a manifest agent whose max_hops disagrees", () => {
+    const d = new Map(defs);
+    d.set("safety-sme", def("safety-sme", { max_hops: 1 }));
+    expect(rules(base, d)).toContain("definition-mismatch");
+  });
+
+  it("rejects a manifest agent whose namespaces disagree", () => {
     const d = new Map(defs);
     d.set("safety-sme", def("safety-sme", { kb_namespaces: ["other"] }));
     expect(rules(base, d)).toContain("definition-mismatch");
