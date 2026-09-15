@@ -7,7 +7,7 @@ Clone and build it once, answer about 25 questions, get a working repo.
 ```
 git clone https://github.com/nickejanssen/team-ai.git
 cd team-ai
-nvm use 22                # Node 22 avoids compiling the native SQLite module
+nvm use 22                # Node 22+ all get prebuilt native SQLite bindings
 npm ci && npm run build
 npm link                  # puts `team-ai` on your PATH
 team-ai init              # run from the directory you want to generate into
@@ -134,12 +134,12 @@ Three repo modes:
 
 team-ai is installed from this repository. It is not published to npm, and the `team-ai` name on npm belongs to an unrelated package, so never use `npx team-ai`.
 
-**Use Node 22** (pinned in `.nvmrc`). Search uses `better-sqlite3`, a native SQLite module that ships prebuilt binaries for Node 22 on Windows, macOS, and Linux. On newer Node versions such as 24 there is no prebuilt binary, so npm compiles it from source, which needs a C++ toolchain (Visual Studio Build Tools with "Desktop development with C++" on Windows, Xcode Command Line Tools on macOS, `build-essential` and Python on Linux). Node 22 avoids all of that.
+**Use Node 22 or newer** (22 is pinned in `.nvmrc` as the default). Search uses `better-sqlite3`, a native SQLite module built on Node-API (N-API), so the same prebuilt binary works across Node 22, 24, and later majors on Windows, macOS, and Linux without a C++ toolchain. Only an unsupported platform/arch combination without a prebuilt binary falls back to compiling from source (Visual Studio Build Tools with "Desktop development with C++" on Windows, Xcode Command Line Tools on macOS, `build-essential` and Python on Linux).
 
 ```
 git clone https://github.com/nickejanssen/team-ai.git
 cd team-ai
-nvm use 22                # or install Node 22 directly
+nvm use 22                # or install Node 22 or newer directly
 npm ci
 npm run build
 npm link                  # optional: puts `team-ai` on your PATH

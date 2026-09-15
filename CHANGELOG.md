@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-14
+
+### Changed
+
+- **`better-sqlite3` upgraded from 11.10.0 to 13.0.3.** v13 rewrote the native
+  binding on Node-API (N-API) instead of the old node-gyp/prebuild-install
+  path, so a single prebuilt binary now runs across Node 22, 24, and later
+  majors without a C++ toolchain. `@types/better-sqlite3` moved from 7.6.12 to
+  9.6.0 to match. README.md and docs/README.source.md no longer claim Node 24
+  needs to compile the native module from source; they now describe Node 22+
+  as supported, with Node 22 remaining the `.nvmrc`-pinned default.
+
 ## [0.4.0] - 2026-09-14
 
 ### Added
@@ -163,7 +175,8 @@ driver ships as an honest stub — see `docs/definition-of-done.md` and the
 - **Dogfood** (`docs/dogfood-notes.md`) — three runs of the framework against
   itself and the five bugs they fixed.
 
-[Unreleased]: https://github.com/nickejanssen/team-ai/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/nickejanssen/team-ai/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/nickejanssen/team-ai/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/nickejanssen/team-ai/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/nickejanssen/team-ai/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/nickejanssen/team-ai/compare/v0.2.0...v0.3.0
