@@ -5,7 +5,7 @@
 
 import { join } from "node:path";
 
-import { readIndexLock } from "./index-lock.js";
+import { readIndexLock, resolveKbScope } from "./index-lock.js";
 import { LexicalAdapter } from "./lexical.js";
 import type { LexicalAdapterOpts } from "./lexical.js";
 import {
@@ -34,8 +34,11 @@ export function createAdapter(
 
   switch (driver) {
     case "lexical": {
+      const scope =
+        opts?.kbRoot === undefined ? resolveKbScope(dir) : { root: opts.kbRoot, exclude: [] };
       const lexicalOpts: LexicalAdapterOpts = {
-        kbRoot: opts?.kbRoot ?? join(dir, "kb"),
+        kbRoot: scope.root,
+        exclude: scope.exclude,
         // The index belongs to the instance directory, not the process cwd, so
         // that concurrent instances never share one SQLite file.
         dbPath: opts?.dbPath ?? join(dir, ".team-ai", "index.sqlite"),

@@ -37,8 +37,12 @@ function pathSegments(relPath: string): string[] {
     .filter((segment) => segment.length > 0);
 }
 
+export function namespaceIdSegment(namespace: string): string {
+  return slug(namespace).replace(/-/g, "");
+}
+
 export function inferId(relPath: string, namespace: string): string {
-  const first = slug(namespace).replace(/-/g, "");
+  const first = namespaceIdSegment(namespace);
   const parts = [first, ...pathSegments(relPath).map((segment) => slug(segment))].filter(
     (part) => part.length > 0,
   );

@@ -58,7 +58,7 @@ const KEY_ORDER = [
 ] as const;
 
 export function parseFrontmatter(raw: string): ParsedDoc {
-  const parsed = matter(raw, { engines });
+  const parsed = matter(raw.replace(/\r\n?/g, "\n"), { engines });
   const data: Record<string, unknown> = { ...parsed.data };
   return {
     data,

@@ -105,4 +105,25 @@ describe("templates/instance", () => {
     expect(fragment.domains.map((d) => d.id)).toEqual(["billing", "onboarding"]);
     expect(fragment.domains[0]?.subagent).toBe("billing-sme");
   });
+
+  it("renders each domain namespace and falls back for unmatched domains", async () => {
+    const engine = fullRun({
+      "team.name": "platform",
+      "team.mission": "Run the shared platform",
+      "agents.domains": "platform, billing",
+    });
+    const ctx = buildContext(engine, { today: new Date("2026-01-01T00:00:00Z") });
+    const dest = mkdtempSync(join(tmpdir(), "team-ai-instance-"));
+    const res = await renderTree({ templateDir: TEMPLATE_DIR, destDir: dest, context: ctx });
+    expect(res.warnings).toEqual([]);
+    expect(res.collisions).toEqual([]);
+
+    const fragment = parseYaml(
+      readFileSync(join(dest, "agents/manifest.fragment.yaml"), "utf8"),
+    ) as { domains: { id: string; kb_namespace: string }[] };
+    expect(fragment.domains.map(({ id, kb_namespace }) => ({ id, kb_namespace }))).toEqual([
+      { id: "platform", kb_namespace: "platform" },
+      { id: "billing", kb_namespace: "operating" },
+    ]);
+  });
 });

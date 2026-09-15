@@ -116,7 +116,7 @@ describe("dogfood Run A — Arcwright (needs the real repo)", () => {
     const printed: string[] = [];
     const code = await init.run({
       dir,
-      answers: loadAnswerFile(ARC_ANSWERS),
+      answers: loadAnswerFile(ARC_ANSWERS).pull,
       preflightTarget: ARCWRIGHT,
       onConflict: "adopt-existing",
       output: (s) => printed.push(s),
@@ -148,7 +148,7 @@ describe("dogfood Run A — Arcwright (needs the real repo)", () => {
 
       const code = await init.run({
         dir,
-        answers: loadAnswerFile(ARC_ANSWERS),
+        answers: loadAnswerFile(ARC_ANSWERS).pull,
         preflightTarget: ARCWRIGHT,
         onConflict: "adopt-existing",
         output: () => undefined,
@@ -176,7 +176,7 @@ describe("dogfood Run A — Arcwright (needs the real repo)", () => {
 
       const code = await init.run({
         dir,
-        answers: loadAnswerFile(ARC_ANSWERS),
+        answers: loadAnswerFile(ARC_ANSWERS).pull,
         preflightTarget: ARCWRIGHT,
         onConflict: "siblings",
         output: () => undefined,
@@ -217,7 +217,7 @@ describe("dogfood Run B — Partner Solutions (runs everywhere)", () => {
     const dir = tmp();
     const code = await init.run({
       dir,
-      answers: loadAnswerFile(PARTNER_ANSWERS),
+      answers: loadAnswerFile(PARTNER_ANSWERS).pull,
       output: () => undefined,
     });
     expect(code).toBe(0);

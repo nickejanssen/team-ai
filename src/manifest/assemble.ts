@@ -7,7 +7,7 @@
 
 import { stringify as stringifyYaml } from "yaml";
 
-import type { Manifest, ManifestDomain } from "../schema/types.js";
+import type { Manifest, ManifestAgent, ManifestDomain, ManifestSkill } from "../schema/types.js";
 import { validate } from "../schema/validate.js";
 
 export interface AssembleInput {
@@ -28,6 +28,10 @@ const DOMAIN_KEY_ORDER: readonly (keyof ManifestDomain)[] = [
   "owner",
   "repo",
   "escalate_to",
+  "group",
+  "authority",
+  "not_owned",
+  "depends_on",
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -40,6 +44,16 @@ function firstError(errors: string[]): string {
 
 function stringOr(value: unknown, fallback: string): string {
   return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+function readAgents(fragment: unknown): ManifestAgent[] | undefined {
+  if (!isRecord(fragment) || !Array.isArray(fragment.agents)) return undefined;
+  return [...(fragment.agents as ManifestAgent[])];
+}
+
+function readSkills(fragment: unknown): ManifestSkill[] | undefined {
+  if (!isRecord(fragment) || !Array.isArray(fragment.skills)) return undefined;
+  return [...(fragment.skills as ManifestSkill[])];
 }
 
 // The fragment is expected to already hold full ManifestDomain objects, so the
@@ -113,10 +127,21 @@ export function assembleManifest(input: AssembleInput): Manifest {
   }
 
   const domains = collected.sort((a, b) => a.id.localeCompare(b.id));
+  const assembled: Manifest = { domains };
+  const agents = readAgents(input.fragment);
+  if (agents !== undefined) assembled.agents = agents;
+  const skills = readSkills(input.fragment);
+  if (skills !== undefined) assembled.skills = skills;
 
-  const guard = validate("manifest", { domains });
+  const guard = validate("manifest", assembled);
   if (!guard.ok) {
     throw new Error(`assembled manifest is invalid: ${firstError(guard.errors)}`);
+  }
+  if (assembled.agents !== undefined) {
+    assembled.agents.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  if (assembled.skills !== undefined) {
+    assembled.skills.sort((a, b) => a.id.localeCompare(b.id));
   }
   return guard.value;
 }
@@ -134,5 +159,12 @@ export function serializeManifest(manifest: Manifest): string {
   const domains = [...manifest.domains]
     .sort((a, b) => a.id.localeCompare(b.id))
     .map((domain) => orderDomainKeys(domain));
-  return `${MANIFEST_HEADER}\n${stringifyYaml({ domains })}`;
+  const out: Record<string, unknown> = { domains };
+  if (manifest.agents !== undefined) {
+    out.agents = [...manifest.agents].sort((a, b) => a.name.localeCompare(b.name));
+  }
+  if (manifest.skills !== undefined) {
+    out.skills = [...manifest.skills].sort((a, b) => a.id.localeCompare(b.id));
+  }
+  return `${MANIFEST_HEADER}\n${stringifyYaml(out)}`;
 }

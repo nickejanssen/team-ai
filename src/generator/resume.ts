@@ -23,10 +23,12 @@ import { computeExclude, renderEntityFiles, TEMPLATES_INSTANCE } from "./entity-
 import { mergeGeneratedManifest, readGeneratedManifest } from "./generated-manifest.js";
 import { renderTree } from "./render.js";
 import { stateFromProfile, type ProfileShape } from "./state-from-profile.js";
+import type { AnswerSource } from "./init-answers.js";
 
 export interface ResumeOptions {
   dir?: string;
-  answers?: () => Promise<string>;
+  catalog?: string;
+  answers?: AnswerSource;
   output?: (s: string) => void;
 }
 
@@ -77,11 +79,8 @@ function resolveAnswer(question: Question, raw: string): unknown {
   return raw;
 }
 
-async function promptRaw(
-  question: Question,
-  pull: (() => Promise<string>) | undefined,
-): Promise<string> {
-  if (pull) return pull();
+async function promptRaw(question: Question, pull: AnswerSource | undefined): Promise<string> {
+  if (pull) return pull(question.id);
   if (question.type === "multi_select") {
     const picked = await checkbox({
       message: question.prompt,
@@ -145,7 +144,10 @@ export async function run(opts: ResumeOptions): Promise<number> {
 
   const priorManifest = readGeneratedManifest(dir);
   const priorByPath = new Map<string, string>(priorManifest.map((e) => [e.path, e.sha256]));
-  const context = buildContext(engine);
+  const context = buildContext(
+    engine,
+    opts.catalog !== undefined ? { instanceCatalogDir: opts.catalog } : {},
+  );
   const exclude = computeExclude(context.seed === true, false);
 
   // `writeOutputs` rewrites the interview docs and the profile, but not the

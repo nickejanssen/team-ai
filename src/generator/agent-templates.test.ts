@@ -84,3 +84,20 @@ describe("agent templates", () => {
     }
   });
 });
+
+it("names only tools the MCP server template implements", () => {
+  const server = readFileSync("templates/mcp-server/server.mjs.hbs", "utf8");
+  const implemented = new Set([...server.matchAll(/^\s{2}(kb_[a-z_]+):\s*\{/gm)].map((m) => m[1]));
+  for (const file of [
+    "templates/instance/agents/sme.yaml.hbs",
+    "templates/instance/agents/_domain-sme.yaml.hbs",
+  ]) {
+    const tools = /^tools:\s*\[([^\]]*)\]/m.exec(readFileSync(file, "utf8"))?.[1] ?? "";
+    for (const tool of tools
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean)) {
+      expect(implemented.has(tool), `${file}: ${tool}`).toBe(true);
+    }
+  }
+});

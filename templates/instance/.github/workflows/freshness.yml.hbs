@@ -10,7 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: nickejanssen/team-ai
+          ref: v0
+          path: .team-ai-cli
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: npx team-ai freshness-audit --fail-on-stale
+      - run: npm ci && npm run build
+        working-directory: .team-ai-cli
+      - run: node .team-ai-cli/dist/cli.js freshness-audit --fail-on-stale

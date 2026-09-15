@@ -22,6 +22,7 @@ import { resolveCitation } from "../kb/citations.js";
 import { loadKb } from "../kb/loader.js";
 import type { KbDoc } from "../kb/types.js";
 import { createAdapter } from "../retrieval/factory.js";
+import { resolveKbScope } from "../retrieval/index-lock.js";
 import type { Hit, RetrievalAdapter } from "../retrieval/types.js";
 import type { GoldenQuestion, Manifest, ManifestDomain, ModelTier } from "../schema/types.js";
 import { validate } from "../schema/validate.js";
@@ -185,7 +186,8 @@ export async function runGoldenFile(
   questions: GoldenQuestion[],
   ctx: RunContext,
 ): Promise<EvalOutcome[]> {
-  const docs = await loadKb(join(ctx.instanceDir, "kb"));
+  const scope = resolveKbScope(ctx.instanceDir);
+  const docs = await loadKb(scope.root, { exclude: scope.exclude });
   const manifest = readManifest(ctx.instanceDir);
 
   const adapter = createAdapter(ctx.instanceDir);

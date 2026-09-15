@@ -4,10 +4,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parse as parseYaml } from "yaml";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { emitClaudeCode } from "./claude-code.js";
 import { loadEmitInput } from "./index.js";
+import { run as runEmit } from "../commands/emit.js";
 
 const FIXTURE = fileURLToPath(new URL("./fixtures/instance", import.meta.url));
 
@@ -45,5 +46,83 @@ describe("emitClaudeCode", () => {
     expect(typeof plugin.name).toBe("string");
     expect(plugin.agents).toHaveLength(input.agents.length);
     expect(plugin.skills).toEqual(["kb-answer"]);
+  });
+});
+
+describe("emitClaudeCode — committed layout options", () => {
+  it("prefixes file names, skips the plugin manifest, and uses built-in search", async () => {
+    const input = await loadEmitInput(FIXTURE);
+    const out = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-opts-"));
+    const written = emitClaudeCode(input, out, {
+      filePrefix: "team-ai-",
+      pluginManifest: false,
+      builtinSearch: true,
+    });
+    expect(written.some((p) => p.endsWith("plugin.json"))).toBe(false);
+    const agent = input.agents[0]!;
+    const raw = readFileSync(join(out, ".claude/agents", `team-ai-${agent.name}.md`), "utf8");
+    const front = parseYaml(/^---\n([\s\S]*?)\n---\n/.exec(raw)?.[1] ?? "") as {
+      name: string;
+      tools: string;
+      model?: string;
+    };
+    expect(front.name).toBe(agent.def.name);
+    expect(front.model).toBeUndefined();
+    expect(front.tools).toBe("Read, Grep, Glob");
+    const searchProcedure = raw.indexOf("## Search procedure");
+    const originalInstructions = raw.indexOf("## Original instructions");
+    expect(searchProcedure).toBeGreaterThanOrEqual(0);
+    expect(searchProcedure).toBeLessThan(originalInstructions);
+    expect(raw).toContain(
+      "The knowledge base is the Markdown under the KB root in `team-ai/index.lock`.",
+    );
+    expect(raw).toContain("Use Read, Grep, and Glob");
+    expect(raw).toContain("tool names under Original instructions are unavailable");
+    for (const ns of agent.def.kb_namespaces) {
+      expect(raw).toContain(`search the KB root for \`^namespace: ${ns}\` to list your documents`);
+    }
+  });
+
+  it("writes the router routing procedure before its original instructions", async () => {
+    const input = await loadEmitInput(FIXTURE);
+    const out = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-router-"));
+    emitClaudeCode(input, out, { builtinSearch: true, pluginManifest: false });
+    const router = input.agents.find((a) => a.def.kind === "router")!;
+    const raw = readFileSync(join(out, ".claude/agents", `${router.name}.md`), "utf8");
+
+    expect(raw).toContain("Read `team-ai/manifest.yaml`");
+    expect(raw).toContain("excluding `not_owned`");
+    expect(raw).toContain("at most one hop");
+    expect(raw.indexOf("## Search procedure")).toBeLessThan(
+      raw.indexOf("## Original instructions"),
+    );
+  });
+
+  it.each(["../", "nested/", "nested\\", "C:\\absolute\\", "/absolute/"])(
+    "rejects a path-like file prefix: %s",
+    async (filePrefix) => {
+      const input = await loadEmitInput(FIXTURE);
+      const out = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-invalid-prefix-"));
+
+      expect(() => emitClaudeCode(input, out, { filePrefix })).toThrow(
+        "filePrefix must be a filename-only prefix",
+      );
+    },
+  );
+});
+
+describe("team-ai emit", () => {
+  it("suppresses the tracked-output warning with --allow-tracked", async () => {
+    const out = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-tracked-"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      expect(await runEmit({ target: "claude-code", dir: FIXTURE, out, allowTracked: true })).toBe(
+        0,
+      );
+      expect(error).not.toHaveBeenCalledWith(expect.stringContaining("not gitignored"));
+    } finally {
+      error.mockRestore();
+    }
   });
 });

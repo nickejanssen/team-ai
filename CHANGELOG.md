@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-14
+
+### Added
+
+- **Manifest topology fields and agent and skill sections.** Manifests now
+  preserve domain authority, ownership boundaries, dependencies, and registered
+  agents and skills.
+- **Deterministic manifest invariant validation.** `validate-manifest` checks
+  routers, specialists, namespaces, definitions, and references before use.
+- **Instance catalog layering.** `init`, `resume`, and `upgrade` resolve
+  instance namespace presets over the framework catalog.
+- **Conflict-safe namespace remapping.** `remap-namespaces` plans and applies
+  namespace and identifier migrations without partial writes.
+- **Committed Claude Code subagents.** `emit --target claude-code` supports
+  tracked files, built-in search instructions, and optional plugin manifests.
+
+### Changed
+
+- **Domain SME namespace scope.** Generated domain specialists now use their
+  own declared namespace instead of the first namespace in the catalog.
+- **Interview answer persistence.** Answers are keyed by question ID so changed
+  question banks fail loudly instead of replaying positionally.
+- **Knowledge base scope and parsing.** Instances can declare a KB root and
+  exclusions; parse failures are reported per file and front matter accepts
+  CRLF and bare CR line endings.
+
+### Fixed
+
+- **Local CLI execution.** The MCP server template invokes a configured local
+  team-ai build, computes its instance root correctly on Windows, and exposes
+  only implemented tools.
+- **Source-built CI workflows.** Reusable and generated workflows check out,
+  build, and invoke team-ai from source rather than downloading an npm package.
+  Generated setup documentation uses the linked local CLI.
+
 ### Security
 
 - **The generator and emitters could write outside their output directory.** A
@@ -128,7 +163,8 @@ driver ships as an honest stub — see `docs/definition-of-done.md` and the
 - **Dogfood** (`docs/dogfood-notes.md`) — three runs of the framework against
   itself and the five bugs they fixed.
 
-[Unreleased]: https://github.com/nickejanssen/team-ai/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/nickejanssen/team-ai/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/nickejanssen/team-ai/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/nickejanssen/team-ai/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/nickejanssen/team-ai/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/nickejanssen/team-ai/compare/v0.1.0...v0.2.0

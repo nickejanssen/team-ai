@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
@@ -7,6 +7,11 @@ export interface IndexLockEmbedding {
   provider: string;
   model: string;
   version: string;
+}
+
+export interface IndexLockKb {
+  root: string;
+  exclude: string[];
 }
 
 export interface IndexLock {
@@ -17,6 +22,7 @@ export interface IndexLock {
     hard_cap: number;
   };
   embedding: IndexLockEmbedding | null;
+  kb?: IndexLockKb;
 }
 
 export const DEFAULT_INDEX_LOCK: IndexLock = {
@@ -37,6 +43,7 @@ function cloneLock(lock: IndexLock): IndexLock {
       hard_cap: lock.chunk.hard_cap,
     },
     embedding: lock.embedding === null ? null : { ...lock.embedding },
+    ...(lock.kb ? { kb: { root: lock.kb.root, exclude: [...lock.kb.exclude] } } : {}),
   };
 }
 
@@ -89,11 +96,25 @@ function parseLock(value: unknown): IndexLock {
     throw new Error("chunk.hard_cap must be >= chunk.target_tokens");
   }
 
-  return {
+  const lock: IndexLock = {
     driver,
     chunk: { split_on: [...split_on], target_tokens, hard_cap },
     embedding: parseEmbedding(embedding),
   };
+
+  if ("kb" in value && value.kb !== undefined) {
+    const kb = value.kb;
+    if (!isRecord(kb) || !isNonEmptyString(kb.root)) {
+      throw new Error("kb must be an object with a non-empty root");
+    }
+    const exclude = kb.exclude ?? [];
+    if (!Array.isArray(exclude) || !exclude.every((e) => isNonEmptyString(e))) {
+      throw new Error("kb.exclude must be a list of non-empty strings");
+    }
+    lock.kb = { root: kb.root, exclude: [...exclude] };
+  }
+
+  return lock;
 }
 
 export function readIndexLock(dir: string): IndexLock {
@@ -141,9 +162,16 @@ export function writeIndexLock(dir: string, lock: IndexLock): void {
             model: lock.embedding.model,
             version: lock.embedding.version,
           },
+    ...(lock.kb ? { kb: { root: lock.kb.root, exclude: [...lock.kb.exclude] } } : {}),
   };
   const body = stringifyYaml(ordered);
   writeFileSync(join(dir, LOCK_FILE), `${HEADER}\n${body}`, "utf8");
+}
+
+export function resolveKbScope(instanceDir: string): { root: string; exclude: string[] } {
+  const lock = readIndexLock(instanceDir);
+  if (lock.kb === undefined) return { root: join(instanceDir, "kb"), exclude: [] };
+  return { root: resolve(instanceDir, lock.kb.root), exclude: [...lock.kb.exclude] };
 }
 
 export function lockChanged(a: IndexLock, b: IndexLock): boolean {
@@ -153,6 +181,14 @@ export function lockChanged(a: IndexLock, b: IndexLock): boolean {
   if (a.chunk.hard_cap !== b.chunk.hard_cap) return true;
   if (a.chunk.split_on.length !== b.chunk.split_on.length) return true;
   if (a.chunk.split_on.some((entry, i) => entry !== b.chunk.split_on[i])) return true;
+
+  if (a.kb === undefined || b.kb === undefined) {
+    if (a.kb !== b.kb) return true;
+  } else {
+    if (a.kb.root !== b.kb.root) return true;
+    if (a.kb.exclude.length !== b.kb.exclude.length) return true;
+    if (a.kb.exclude.some((entry, i) => entry !== b.kb?.exclude[i])) return true;
+  }
 
   if (a.embedding === null || b.embedding === null) {
     return a.embedding !== b.embedding;

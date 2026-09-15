@@ -43,6 +43,8 @@ export interface AgentDef {
   escalate_to?: string;
 }
 
+export type DomainAuthority = "canonical" | "provisional" | "archived";
+
 export interface ManifestDomain {
   id: string;
   description: string;
@@ -53,10 +55,39 @@ export interface ManifestDomain {
   owner: string;
   repo?: string;
   escalate_to?: string;
+  group?: string;
+  authority?: DomainAuthority;
+  not_owned?: string[];
+  depends_on?: string[];
+}
+
+export interface ManifestAgent {
+  name: string;
+  tier: 1 | 2 | 3;
+  kind: AgentKind;
+  max_hops: number;
+  kb_namespaces: string[];
+  group?: string;
+  skills?: string[];
+  escalate_to?: string;
+  source?: "generated" | "authored";
+  path?: string;
+}
+
+export interface ManifestSkill {
+  id: string;
+  deterministic: boolean;
+  description?: string;
+  script?: string;
+  used_by?: string[];
+  path?: string;
+  source?: "generated" | "authored";
 }
 
 export interface Manifest {
   domains: ManifestDomain[];
+  agents?: ManifestAgent[];
+  skills?: ManifestSkill[];
 }
 
 export interface GoldenQuestion {

@@ -16,10 +16,12 @@ import * as review from "./generator/review.js";
 import * as spoke from "./generator/spoke.js";
 import * as upgrade from "./generator/upgrade.js";
 import * as reindex from "./commands/reindex.js";
+import * as remapNamespaces from "./commands/remap-namespaces.js";
 import * as runEvals from "./commands/run-evals.js";
 import * as search from "./commands/search.js";
 import * as validateCitations from "./commands/validate-citations.js";
 import * as validateKb from "./commands/validate-kb.js";
+import * as validateManifest from "./commands/validate-manifest.js";
 import * as validateSpoke from "./commands/validate-spoke.js";
 import { packageVersion } from "./version.js";
 
@@ -71,9 +73,22 @@ export function buildProgram(): Command {
     configure: (command) => {
       command
         .option("--root <dir>", "knowledge-base root directory", "kb")
+        .option(
+          "--instance <dir>",
+          "instance directory; KB root and exclusions come from its index.lock",
+        )
         .option("--schema-only", "validate front matter only; skip relation checks", false);
     },
     run: validateKb.run,
+  });
+
+  registerCommand(program, {
+    name: "validate-manifest",
+    description: "Check manifest topology invariants against agent definitions",
+    configure: (command) => {
+      command.option("--root <dir>", "instance root directory", ".");
+    },
+    run: validateManifest.run,
   });
 
   registerCommand(program, {
@@ -104,6 +119,24 @@ export function buildProgram(): Command {
   });
 
   registerCommand(program, {
+    name: "remap-namespaces",
+    description: "Rewrite KB namespace and id values from a mapping file (proposal unless --apply)",
+    configure: (command) => {
+      command
+        .option(
+          "--instance <dir>",
+          "instance directory whose index.lock declares the KB scope",
+          ".",
+        )
+        .option("--mapping <file>", "YAML mapping: namespaces and per-file overrides")
+        .option("--out <file>", "where to write the proposal", "remap-proposal.yaml")
+        .option("--inventory <file>", "also write a tab-separated inventory")
+        .option("--apply", "write the changes; refuses while any conflict exists", false);
+    },
+    run: remapNamespaces.run,
+  });
+
+  registerCommand(program, {
     name: "assemble-manifest",
     description: "Merge the instance manifest fragment and spoke configs into manifest.yaml",
     configure: (command) => {
@@ -120,6 +153,10 @@ export function buildProgram(): Command {
     configure: (command) => {
       command
         .option("--root <dir>", "knowledge-base root directory", "kb")
+        .option(
+          "--instance <dir>",
+          "instance directory; KB root and exclusions come from its index.lock",
+        )
         .option("--fail-on-stale", "exit non-zero when stale documents exist", false)
         .option("--open-issues", "draft GitHub issues for stale docs (dry run only)", false)
         .option("--repo <owner/name>", "target repository for --open-issues live mode")
@@ -167,11 +204,12 @@ export function buildProgram(): Command {
     configure: (command) => {
       command
         .option("--dir <dir>", "target directory to generate into", ".")
+        .option("--catalog <dir>", "instance catalog directory layered over the framework catalog")
         .option("--dry-run", "classify what would be written; write nothing", false)
         .option("--resume", "resume a saved interview instead of starting fresh", false)
         .option(
           "--answers <file>",
-          "ordered YAML/JSON list of answer strings for a non-interactive run",
+          "keyed YAML mapping by question id (legacy positional lists also supported)",
         )
         .addOption(
           new Option(
@@ -189,8 +227,18 @@ export function buildProgram(): Command {
     run: (opts: InitCliOptions): Promise<number> => {
       const { answers, ...rest } = opts;
       const initOpts: init.InitOptions = { ...rest };
-      if (typeof answers === "string") initOpts.answers = loadAnswerFile(answers);
-      return init.run(initOpts);
+      const loaded = typeof answers === "string" ? loadAnswerFile(answers) : undefined;
+      if (loaded) initOpts.answers = loaded.pull;
+      return init.run(initOpts).then((code) => {
+        if (loaded) {
+          for (const key of loaded.unusedKeys()) {
+            console.error(
+              `WARNING: answers file entry '${key}' was never asked (pre-filled or skipped)`,
+            );
+          }
+        }
+        return code;
+      });
     },
   });
 
@@ -241,7 +289,9 @@ export function buildProgram(): Command {
     name: "resume",
     description: "Re-open a saved interview and ask only the newly relevant questions",
     configure: (command) => {
-      command.option("--dir <dir>", "instance directory containing team-profile.yaml", ".");
+      command
+        .option("--dir <dir>", "instance directory containing team-profile.yaml", ".")
+        .option("--catalog <dir>", "instance catalog directory layered over the framework catalog");
     },
     run: resume.run,
   });
@@ -260,7 +310,9 @@ export function buildProgram(): Command {
     description:
       "Refresh the framework plumbing (CI, eval gates, SETUP, index.lock chunk) in place",
     configure: (command) => {
-      command.option("--dir <dir>", "instance directory containing team-profile.yaml", ".");
+      command
+        .option("--dir <dir>", "instance directory containing team-profile.yaml", ".")
+        .option("--catalog <dir>", "instance catalog directory layered over the framework catalog");
     },
     run: upgrade.run,
   });
@@ -278,7 +330,19 @@ export function buildProgram(): Command {
           ]),
         )
         .option("--dir <dir>", "instance directory", ".")
-        .option("--out <dir>", "output directory (should be gitignored)", "emitted");
+        .option("--out <dir>", "output directory (should be gitignored)", "emitted")
+        .option("--file-prefix <prefix>", "prefix for emitted Claude Code agent file names", "")
+        .option("--no-plugin-manifest", "do not write .claude-plugin/plugin.json")
+        .option(
+          "--builtin-search",
+          "give agents Read, Grep, Glob and a namespace lookup section",
+          false,
+        )
+        .option(
+          "--allow-tracked",
+          "emitted output is intentionally committed; skip the gitignore warning",
+          false,
+        );
     },
     run: emit.run,
   });

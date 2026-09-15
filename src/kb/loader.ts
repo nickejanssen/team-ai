@@ -40,15 +40,39 @@ async function listMarkdown(root: string): Promise<string[]> {
     .sort(byPath);
 }
 
-export async function loadKb(root: string): Promise<KbDoc[]> {
-  const markdown = await listMarkdown(root);
+export interface LoadKbOptions {
+  exclude?: string[];
+}
+
+export function isExcluded(relPath: string, exclude: string[]): boolean {
+  return exclude.some((entry) => {
+    if (entry.endsWith("/")) return relPath.startsWith(entry);
+    if (entry.startsWith("**/")) {
+      const tail = entry.slice(3);
+      return relPath === tail || relPath.endsWith(`/${tail}`);
+    }
+    return relPath === entry;
+  });
+}
+
+export async function loadKb(root: string, opts: LoadKbOptions = {}): Promise<KbDoc[]> {
+  const markdown = (await listMarkdown(root)).filter((rel) => !isExcluded(rel, opts.exclude ?? []));
 
   const docs: KbDoc[] = [];
   const failures: { file: string; error: string }[] = [];
 
   for (const relPath of markdown) {
     const raw = await readFile(join(root, relPath), "utf8");
-    const { data, body } = parseFrontmatter(raw);
+    let parsed: ReturnType<typeof parseFrontmatter>;
+    try {
+      parsed = parseFrontmatter(raw);
+    } catch (err) {
+      const reason =
+        err instanceof Error ? (err.message.split("\n")[0] ?? err.message) : String(err);
+      failures.push({ file: relPath, error: `front matter does not parse: ${reason}` });
+      continue;
+    }
+    const { data, body } = parsed;
     const result = validate("frontmatter", data);
     if (!result.ok) {
       failures.push({ file: relPath, error: result.errors[0] ?? "invalid front matter" });

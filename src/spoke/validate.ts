@@ -7,11 +7,12 @@
 // the contract and each such violation is counted as a required core edit.
 
 import { readFile, readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 
 import { parse as parseYaml } from "yaml";
 
 import { KbValidationError, loadKb } from "../kb/loader.js";
+import { resolveKbScope } from "../retrieval/index-lock.js";
 import { validate } from "../schema/validate.js";
 
 export interface SpokeValidationResult {
@@ -72,15 +73,20 @@ async function checkSpokeConfig(dir: string, errors: string[]): Promise<void> {
 }
 
 async function checkKb(dir: string, errors: string[]): Promise<void> {
+  let label = "kb";
   try {
-    await loadKb(join(dir, "kb"));
+    const scope = resolveKbScope(dir);
+    label = toPosix(relative(dir, scope.root)) || ".";
+    await loadKb(scope.root, { exclude: scope.exclude });
   } catch (err) {
     if (err instanceof KbValidationError) {
-      for (const failure of err.failures) errors.push(`kb/${failure.file}: ${failure.error}`);
+      for (const failure of err.failures) {
+        errors.push(`${label}/${failure.file}: ${failure.error}`);
+      }
       return;
     }
     if (err instanceof Error && err.message.startsWith("KB root not found")) {
-      errors.push("kb/ directory is required");
+      errors.push(`${label}/ directory is required`);
       return;
     }
     errors.push(err instanceof Error ? err.message : String(err));

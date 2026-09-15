@@ -10,9 +10,11 @@
 import { renderIssueDrafts, auditFreshness } from "../audit/freshness.js";
 import { KbValidationError, loadKb } from "../kb/loader.js";
 import type { KbDoc } from "../kb/types.js";
+import { resolveKbScope } from "../retrieval/index-lock.js";
 
 export interface FreshnessAuditOptions {
   root?: string;
+  instance?: string;
   failOnStale?: boolean;
   openIssues?: boolean;
   repo?: string;
@@ -34,7 +36,10 @@ function parseToday(value: string | undefined): Date {
 }
 
 export async function run(opts: FreshnessAuditOptions): Promise<number> {
-  const root = opts.root ?? "kb";
+  const scope =
+    opts.instance === undefined
+      ? { root: opts.root ?? "kb", exclude: [] }
+      : resolveKbScope(opts.instance);
 
   let today: Date;
   try {
@@ -46,7 +51,7 @@ export async function run(opts: FreshnessAuditOptions): Promise<number> {
 
   let docs: KbDoc[];
   try {
-    docs = await loadKb(root);
+    docs = await loadKb(scope.root, { exclude: scope.exclude });
   } catch (err) {
     if (err instanceof KbValidationError) {
       console.error(

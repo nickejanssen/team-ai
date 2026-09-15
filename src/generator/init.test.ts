@@ -116,6 +116,48 @@ describe("team-ai init", () => {
     expect(existsSync(join(dir, "personas/internal-technical.md"))).toBe(true);
   });
 
+  it("uses an instance catalog namespace preset when generating domain SMEs", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "team-ai-init-"));
+    mkdirSync(join(dir, "cat", "namespaces"), { recursive: true });
+    const seeds = ["a", "b", "c", "d", "e"]
+      .map((n) => `  - path: ${n}.md\n    title: ${n}\n    purpose: seed ${n}`)
+      .join("\n");
+    writeFileSync(
+      join(dir, "cat", "namespaces", "custom.yaml"),
+      `name: named-differently\ndescription: x\nsecond_level:\n  - alpha\n  - beta\ndomain_dir: null\nseed_docs:\n${seeds}\n`,
+      "utf8",
+    );
+    const overrides = {
+      ...OVERRIDES,
+      "kb.namespaces": "custom",
+      "agents.domains": "alpha, beta",
+    };
+    const code = await run({
+      dir,
+      catalog: join(dir, "cat"),
+      answers: puller(scriptedAnswers(overrides)),
+    });
+    expect(code).toBe(0);
+
+    expect(await validateKb.run({ root: join(dir, "kb"), schemaOnly: true })).toBe(0);
+    expect(await reindex.run({ root: dir })).toBe(0);
+    expect(await assembleManifest.run({ root: dir, check: false })).toBe(0);
+
+    expect(existsSync(join(dir, "team-profile.yaml"))).toBe(true);
+    const profile = parseYaml(readFileSync(join(dir, "team-profile.yaml"), "utf8")) as unknown;
+    expect(validate("team-profile", profile).ok).toBe(true);
+
+    expect(readFileSync(join(dir, "agents", "alpha-sme.yaml"), "utf8")).toContain(
+      "kb_namespaces: [alpha]",
+    );
+    expect(readFileSync(join(dir, "agents", "beta-sme.yaml"), "utf8")).toContain(
+      "kb_namespaces: [beta]",
+    );
+
+    expect(existsSync(join(dir, "agents/roles/architect.yaml"))).toBe(true);
+    expect(existsSync(join(dir, "personas/internal-technical.md"))).toBe(true);
+  });
+
   it("never overwrites a hand-authored file; writes a .team-ai-new sibling instead", async () => {
     const dir = mkdtempSync(join(tmpdir(), "team-ai-init-"));
     mkdirSync(join(dir, "agents"), { recursive: true });

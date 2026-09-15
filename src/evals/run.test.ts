@@ -1,4 +1,12 @@
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -238,6 +246,22 @@ describe("runGoldenFile", () => {
     const [outcome] = await runGoldenFile([question], { instanceDir: dir });
     expect(outcome?.routedTo).toBe("platform-sme");
     expect(outcome?.namespaceOk).toBe(false);
+  });
+
+  it("loads documents from the declared KB root and skips exclusions", async () => {
+    const dir = makeInstance();
+    renameSync(join(dir, "kb"), join(dir, "docs"));
+    mkdirSync(join(dir, "docs", "archive"), { recursive: true });
+    writeFileSync(join(dir, "docs", "archive", "bad.md"), "no front matter", "utf8");
+    writeFileSync(
+      join(dir, "index.lock"),
+      "driver: lexical\nchunk:\n  split_on: [h2, h3]\n  target_tokens: 800\n  hard_cap: 1200\nembedding: null\nkb:\n  root: docs\n  exclude: [archive/]\n",
+      "utf8",
+    );
+
+    const outcomes = await runGoldenFile(readGolden(dir), { instanceDir: dir });
+    expect(outcomes).toHaveLength(4);
+    expect(outcomes.every((outcome) => outcome.citationsValid)).toBe(true);
   });
 });
 

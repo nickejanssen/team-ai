@@ -26,10 +26,14 @@ See [`SETUP.md`](SETUP.md).
 
 ## Day to day
 
+These commands use the team-ai CLI built from source. It is not published to
+npm, so install it by cloning github.com/nickejanssen/team-ai and running
+`npm ci`, `npm run build`, and `npm link` under Node 22. See that repository's
+README.
 ```bash
-npx team-ai validate-kb            # front matter + relations
-npx team-ai assemble-manifest      # rebuild manifest.yaml from the fragment
-npx team-ai reindex                # rebuild the retrieval index
-npx team-ai run-evals              # replay the golden set against the gates
-npx team-ai freshness-audit        # list stale / orphaned / unowned docs
+team-ai validate-kb            # front matter + relations
+team-ai assemble-manifest      # rebuild manifest.yaml from the fragment
+team-ai reindex                # rebuild the retrieval index
+team-ai run-evals              # replay the golden set against the gates
+team-ai freshness-audit        # list stale / orphaned / unowned docs
 ```

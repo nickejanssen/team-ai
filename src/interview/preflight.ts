@@ -12,6 +12,7 @@ import { basename, join } from "node:path";
 import { parse as parseYaml } from "yaml";
 
 import { KbValidationError, loadKb } from "../kb/loader.js";
+import { resolveKbScope } from "../retrieval/index-lock.js";
 import {
   AGENT_CONFIG_DIRS,
   AGENT_CONFIG_FILES,
@@ -139,7 +140,8 @@ async function pickAgentConfigFile(dir: string): Promise<string | undefined> {
 
 async function countKbDocs(dir: string): Promise<number> {
   try {
-    return (await loadKb(join(dir, "kb"))).length;
+    const scope = resolveKbScope(dir);
+    return (await loadKb(scope.root, { exclude: scope.exclude })).length;
   } catch (err) {
     // Best effort: a partially-invalid KB still means "a KB exists here".
     if (err instanceof KbValidationError) return err.failures.length;
