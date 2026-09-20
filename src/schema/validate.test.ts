@@ -83,6 +83,36 @@ describe("frontmatter schema", () => {
   });
 });
 
+describe("golden schema provenance fields", () => {
+  const base = {
+    id: "eval.kg.example",
+    question: "Where is second-hand knowledge recorded?",
+    expect_namespace: "knowledge-graph",
+    expect_paths: ["architecture/04-knowledge-graph.md"],
+    expect_route: "knowledge-graph-sme",
+    expect_tier_max: "small",
+    must_cite: true,
+  };
+
+  it("accepts the original seven fields alone", () => {
+    expect(validate("golden", base).ok).toBe(true);
+  });
+
+  it("accepts provenance and answer evidence", () => {
+    const withProvenance = {
+      ...base,
+      source_path: "architecture/04-knowledge-graph.md",
+      generated_on: "2026-09-20",
+      answer_evidence: "who knows what, when they learned it, and from whom",
+    };
+    expect(validate("golden", withProvenance).ok).toBe(true);
+  });
+
+  it("still rejects an unknown field", () => {
+    expect(validate("golden", { ...base, sorce_path: "x" }).ok).toBe(false);
+  });
+});
+
 describe("manifest — topology fields", () => {
   const domain = {
     id: "knowledge-graph",
