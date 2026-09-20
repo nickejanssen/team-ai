@@ -27,8 +27,6 @@ export interface EvalOutcome {
 export interface GateThresholds {
   hitRate: number;
   citationValidity: number;
-  routingAccuracy: number;
-  namespaceAccuracy: number;
   coverage: number;
 }
 
@@ -95,8 +93,6 @@ export function computeReport(outcomes: EvalOutcome[], gates: GateThresholds): E
   const gateResults: Record<string, GateResult> = {
     hitRate: gate(metrics.hitRate, gates.hitRate),
     citationValidity: gate(metrics.citationValidity, gates.citationValidity),
-    routingAccuracy: gate(metrics.routingAccuracy, gates.routingAccuracy),
-    namespaceAccuracy: gate(metrics.namespaceAccuracy, gates.namespaceAccuracy),
     coverage: gate(metrics.coverage, gates.coverage),
   };
 

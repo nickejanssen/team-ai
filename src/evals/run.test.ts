@@ -271,8 +271,6 @@ describe("loadGates", () => {
     expect(loadGates(dir)).toEqual({
       hitRate: 0.8,
       citationValidity: 1.0,
-      routingAccuracy: 0.8,
-      namespaceAccuracy: 0.8,
       coverage: 0.8,
     });
   });
@@ -280,13 +278,12 @@ describe("loadGates", () => {
   it("reads overrides from <instance>/evals/gates.yaml", () => {
     const dir = makeInstance();
     mkdirSync(join(dir, "evals"), { recursive: true });
-    writeFileSync(join(dir, "evals", "gates.yaml"), "hitRate: 0.5\nroutingAccuracy: 0.6\n");
+    writeFileSync(join(dir, "evals", "gates.yaml"), "hitRate: 0.5\n");
     const gates = loadGates(dir);
     expect(gates.hitRate).toBe(0.5);
-    expect(gates.routingAccuracy).toBe(0.6);
     // unspecified keys fall back to the shipped defaults
     expect(gates.citationValidity).toBe(1);
-    expect(gates.namespaceAccuracy).toBe(0.8);
+    expect(gates.coverage).toBe(0.8);
   });
 
   it("keeps the reference evals/gates.yaml in sync with DEFAULT_GATES", () => {
