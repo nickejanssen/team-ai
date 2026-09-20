@@ -219,7 +219,8 @@ function clampK(k: number | undefined): number {
 // retrieve nothing. The list below is used as a GATE for that purpose. It is
 // deliberately NOT used to filter terms out of the match expression.
 //
-// Measured 2026-09-20 on the 37-question Arcwright set: filtering stopwords out
+// Measured 2026-09-20 on a 37-question golden set over a ~966,000-token corpus:
+// filtering stopwords out
 // of the match cost 6.1 points of hit rate (48.5% -> 42.4%) and 8.1 points of
 // routing accuracy (24.3% -> 16.2%). BM25 already discounts common terms by
 // inverse document frequency, so removing them discards disambiguating context

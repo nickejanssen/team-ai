@@ -31,14 +31,15 @@ import type { EvalOutcome, GateThresholds } from "./metrics.js";
 
 const TOP_K = 8;
 const REFUSE_ROUTE = "__refuse__";
-// Measured against the 37-question Arcwright set on 2026-09-20: no threshold
+// Measured against a 37-question golden set over a ~966,000-token corpus on
+// 2026-09-20: no threshold
 // over term statistics separates answerable from unanswerable questions on a
 // ~966,000-token corpus. Out-of-scope top scores ran 0.547-0.773 against
 // in-scope 0.525-0.686; peakedness and content-word coverage overlap likewise.
 // A corpus this large contains nearly every common English word, so an
 // unrelated question still finds real matches. Refusal is a judgement over
 // retrieved content, made by the agent in the delivery path and measured by
-// the Arcwright-side delegation eval, not by this harness. The threshold below
+// the delegation eval, not by this harness. The threshold below
 // only suppresses genuinely empty result sets. Refusal is not decidable from
 // term statistics, so the strict comparison only rejects a non-match.
 const REFUSE_THRESHOLD = 0;

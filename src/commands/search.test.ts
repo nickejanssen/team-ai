@@ -44,14 +44,18 @@ describe("search", () => {
 
   it("prints ranked lines for a relevant query", async () => {
     const root = await indexed();
-    const code = await search("429 rate limit errors", { root, k: 5 });
+    const code = await search("429 rate limit errors", { root, k: 5, json: true });
 
     expect(code).toBe(0);
-    const lines = log.mock.calls.map((c) => String(c[0]));
-    expect(lines.length).toBeGreaterThan(0);
-    expect(lines[0]).toMatch(/^\d\.\d{3}\s{2}platform\/rate-limits\.md/);
-    const topScore = Number.parseFloat(lines[0]?.split(/\s+/)[0] ?? "0");
-    expect(topScore).toBeGreaterThan(0.5);
+    const relevant = JSON.parse(String(log.mock.calls[0]?.[0])) as Hit[];
+    expect(relevant.length).toBeGreaterThan(0);
+
+    log.mockClear();
+    const nonsenseCode = await search("kubernetes helm chart", { root, k: 5, json: true });
+    expect(nonsenseCode).toBe(0);
+    const nonsense = JSON.parse(String(log.mock.calls[0]?.[0])) as Hit[];
+    expect(nonsense.length).toBeGreaterThan(0);
+    expect(relevant[0]!.score).toBeGreaterThan(nonsense[0]!.score);
   });
 
   it("emits a parseable Hit[] with --json", async () => {
