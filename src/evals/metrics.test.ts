@@ -7,6 +7,7 @@ const DEFAULT_GATES: GateThresholds = {
   citationValidity: 1.0,
   routingAccuracy: 0.8,
   namespaceAccuracy: 0.8,
+  coverage: 0.8,
 };
 
 function outcome(overrides: Partial<EvalOutcome> = {}): EvalOutcome {
@@ -22,6 +23,9 @@ function outcome(overrides: Partial<EvalOutcome> = {}): EvalOutcome {
     tierOk: true,
     refuseExpected: false,
     refuseCorrect: true,
+    covered: null,
+    expectNamespace: "domain",
+    sourceChangedSinceGenerated: false,
     ...overrides,
   };
 }
@@ -109,6 +113,19 @@ describe("computeReport metrics", () => {
     );
     expect(report.metrics.namespaceAccuracy).toBe(0.75);
   });
+
+  it("reports coverage overall and per namespace", () => {
+    const outcomes = [
+      outcome({ id: "a", expectNamespace: "kg", covered: true }),
+      outcome({ id: "b", expectNamespace: "kg", covered: false }),
+      outcome({ id: "c", expectNamespace: "safety", covered: true }),
+      outcome({ id: "d", expectNamespace: "", covered: null }),
+    ];
+    const report = computeReport(outcomes, DEFAULT_GATES);
+    expect(report.metrics.coverage).toBeCloseTo(2 / 3, 10);
+    expect(report.coverageByNamespace["kg"]).toBeCloseTo(0.5, 10);
+    expect(report.coverageByNamespace["safety"]).toBeCloseTo(1, 10);
+  });
 });
 
 describe("computeReport gates", () => {
@@ -177,6 +194,7 @@ describe("computeReport gates", () => {
     const report = computeReport([outcome()], DEFAULT_GATES);
     expect(Object.keys(report.gates).sort()).toEqual([
       "citationValidity",
+      "coverage",
       "hitRate",
       "namespaceAccuracy",
       "routingAccuracy",

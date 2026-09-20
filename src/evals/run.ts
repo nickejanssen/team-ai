@@ -13,6 +13,7 @@
 //      when nothing retrieved maps to a manifest domain. A confident wrong
 //      route is worse than no answer.
 
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -45,6 +46,7 @@ export const DEFAULT_GATES: GateThresholds = {
   citationValidity: 1.0,
   routingAccuracy: 0.8,
   namespaceAccuracy: 0.8,
+  coverage: 0.8,
 };
 
 const TIER_RANK: Record<ModelTier, number> = { none: 0, small: 1, large: 2 };
@@ -186,6 +188,18 @@ function namespaceForRoute(manifest: Manifest, route: string): string | undefine
   return manifest.domains.find((domain) => domain.subagent === route)?.kb_namespace;
 }
 
+function sourceChangedSince(root: string, path: string, since: string): boolean {
+  try {
+    const out = execFileSync("git", ["log", "-1", "--format=%cs", "--", path], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim();
+    return out.length > 0 && out > since;
+  } catch {
+    return false;
+  }
+}
+
 export async function runGoldenFile(
   questions: GoldenQuestion[],
   ctx: RunContext,
@@ -206,6 +220,23 @@ export async function runGoldenFile(
       const refuseExpected = question.expect_route === REFUSE_ROUTE;
       const routedTo = routing.route;
       const routedNamespace = namespaceForRoute(manifest, routedTo);
+      const evidence = question.answer_evidence;
+      let covered: boolean | null = null;
+      if (evidence !== undefined && evidence.length > 0) {
+        const needle = evidence.toLowerCase();
+        covered = docs.some(
+          (doc) =>
+            doc.frontmatter.namespace === question.expect_namespace &&
+            doc.body.toLowerCase().includes(needle),
+        );
+      }
+
+      const source = question.source_path;
+      const generatedOn = question.generated_on;
+      const sourceChangedSinceGenerated =
+        source !== undefined && generatedOn !== undefined
+          ? sourceChangedSince(scope.root, source, generatedOn)
+          : false;
 
       outcomes.push({
         id: question.id,
@@ -221,6 +252,9 @@ export async function runGoldenFile(
         tierOk: TIER_RANK[routing.tier] <= TIER_RANK[question.expect_tier_max],
         refuseExpected,
         refuseCorrect: refuseExpected ? routedTo === REFUSE_ROUTE : routedTo !== REFUSE_ROUTE,
+        covered,
+        expectNamespace: question.expect_namespace,
+        sourceChangedSinceGenerated,
       });
     }
     return outcomes;
@@ -253,5 +287,6 @@ export function loadGates(instanceDir: string): GateThresholds {
     citationValidity: pick("citationValidity"),
     routingAccuracy: pick("routingAccuracy"),
     namespaceAccuracy: pick("namespaceAccuracy"),
+    coverage: pick("coverage"),
   };
 }

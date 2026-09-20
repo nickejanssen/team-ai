@@ -129,6 +129,7 @@ function printReport(report: EvalReport): void {
   const rows: MetricRow[] = [
     gateRow("hitRate", metrics.hitRate),
     gateRow("citationValidity", metrics.citationValidity),
+    gateRow("coverage", metrics.coverage),
     {
       name: "tierCeiling",
       value: metrics.tierCeiling,
@@ -145,6 +146,19 @@ function printReport(report: EvalReport): void {
       `${entry.name.padEnd(18)} ${pct(entry.value)}  ${pct(entry.threshold)}    ` +
         (entry.pass ? "PASS" : "FAIL"),
     );
+  }
+
+  console.log("");
+  console.log("coverage by namespace:");
+  for (const [namespace, value] of Object.entries(report.coverageByNamespace).sort()) {
+    console.log(`  ${namespace.padEnd(24)} ${pct(value)}`);
+  }
+
+  const staleQuestions = report.outcomes.filter((outcome) => outcome.sourceChangedSinceGenerated);
+  if (staleQuestions.length > 0) {
+    console.log("");
+    console.log("questions whose source document changed since they were written:");
+    for (const outcome of staleQuestions) console.log(`  ${outcome.id}`);
   }
 
   const failing = report.outcomes

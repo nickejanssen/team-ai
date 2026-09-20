@@ -273,6 +273,7 @@ describe("loadGates", () => {
       citationValidity: 1.0,
       routingAccuracy: 0.8,
       namespaceAccuracy: 0.8,
+      coverage: 0.8,
     });
   });
 
