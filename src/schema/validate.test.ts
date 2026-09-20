@@ -37,6 +37,22 @@ describe("frontmatter schema", () => {
     expect(r.ok).toBe(true);
   });
 
+  it("allows instance extension fields under the x- prefix", () => {
+    const r = validate("frontmatter", {
+      ...MINIMAL_FRONTMATTER,
+      "x-scope-evidence": "none",
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("still rejects a misspelled core field", () => {
+    const r = validate("frontmatter", {
+      ...MINIMAL_FRONTMATTER,
+      reviewby: "2027-01-01",
+    });
+    expect(r.ok).toBe(false);
+  });
+
   it("rejects an unknown status with a path-anchored message", () => {
     const r = validate("frontmatter", {
       id: "x.a.b",

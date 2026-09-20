@@ -16,6 +16,9 @@
     "tags",
     "supersedes"
   ],
+  "patternProperties": {
+    "^x-[a-z0-9-]+$": {}
+  },
   "properties": {
     "id": {
       "type": "string",
