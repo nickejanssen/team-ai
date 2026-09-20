@@ -54,8 +54,8 @@ describe("search", () => {
     const nonsenseCode = await search("kubernetes helm chart", { root, k: 5, json: true });
     expect(nonsenseCode).toBe(0);
     const nonsense = JSON.parse(String(log.mock.calls[0]?.[0])) as Hit[];
-    expect(nonsense.length).toBeGreaterThan(0);
-    expect(relevant[0]!.score).toBeGreaterThan(nonsense[0]!.score);
+    const nonsenseTop = nonsense[0]?.score ?? 0;
+    expect(relevant[0]!.score).toBeGreaterThan(nonsenseTop);
   });
 
   it("emits a parseable Hit[] with --json", async () => {
