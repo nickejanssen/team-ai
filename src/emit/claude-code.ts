@@ -66,11 +66,26 @@ function searchSection(agent: EmitAgent, corpusTokens: Record<string, number> | 
     ].join("\n");
   }
 
+  const namespaces = agent.def.kb_namespaces;
+
+  if (agent.def.max_hops > 0) {
+    return [
+      ...common,
+      "You delegate. You do not search your group's corpus yourself.",
+      "",
+      "- Read `team-ai/manifest.yaml` and find which of your domains owns the question.",
+      `- Your domains: ${namespaces.join(", ")}.`,
+      "- Hand off to that domain's subagent and stop.",
+      "- Only when a question genuinely spans two of your domains, delegate to",
+      "  both and reconcile their cited answers. Never answer from memory.",
+      "- If none of your domains owns it, say so and name the likely owner.",
+    ].join("\n");
+  }
+
   if (corpusTokens === undefined) {
     throw new Error("builtin-search emit requires corpus sizes; none were computed");
   }
 
-  const namespaces = agent.def.kb_namespaces;
   const total = namespaces.reduce((sum, namespace) => sum + (corpusTokens[namespace] ?? 0), 0);
   const listing = namespaces
     .map(
