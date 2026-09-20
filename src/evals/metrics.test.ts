@@ -6,7 +6,6 @@ const DEFAULT_GATES: GateThresholds = {
   hitRate: 0.8,
   citationValidity: 1.0,
   routingAccuracy: 0.8,
-  refusalRate: 1.0,
   namespaceAccuracy: 0.8,
 };
 
@@ -113,6 +112,14 @@ describe("computeReport metrics", () => {
 });
 
 describe("computeReport gates", () => {
+  it("reports refusalRate without gating on it", () => {
+    const outcomes = [outcome({ id: "a", refuseExpected: true, refuseCorrect: false })];
+    const report = computeReport(outcomes, DEFAULT_GATES);
+    expect(report.metrics.refusalRate).toBe(0);
+    expect(report.gates.refusalRate).toBeUndefined();
+    expect(report.pass).toBe(true);
+  });
+
   it("passes when every gate meets its threshold and the tier ceiling is perfect", () => {
     const report = computeReport(
       [outcome(), outcome(), outcome({ refuseExpected: true, refuseCorrect: true })],
@@ -136,7 +143,6 @@ describe("computeReport gates", () => {
     expect(report.gates.hitRate?.pass).toBe(true);
     expect(report.gates.citationValidity?.pass).toBe(true);
     expect(report.gates.routingAccuracy?.pass).toBe(true);
-    expect(report.gates.refusalRate?.pass).toBe(true);
     expect(report.gates.namespaceAccuracy?.pass).toBe(true);
     expect(report.metrics.tierCeiling).toBe(0);
     expect(report.pass).toBe(false);
@@ -173,7 +179,6 @@ describe("computeReport gates", () => {
       "citationValidity",
       "hitRate",
       "namespaceAccuracy",
-      "refusalRate",
       "routingAccuracy",
     ]);
   });

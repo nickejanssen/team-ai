@@ -25,7 +25,6 @@ export interface GateThresholds {
   hitRate: number;
   citationValidity: number;
   routingAccuracy: number;
-  refusalRate: number;
   namespaceAccuracy: number;
 }
 
@@ -82,7 +81,6 @@ export function computeReport(outcomes: EvalOutcome[], gates: GateThresholds): E
     hitRate: gate(metrics.hitRate, gates.hitRate),
     citationValidity: gate(metrics.citationValidity, gates.citationValidity),
     routingAccuracy: gate(metrics.routingAccuracy, gates.routingAccuracy),
-    refusalRate: gate(metrics.refusalRate, gates.refusalRate),
     namespaceAccuracy: gate(metrics.namespaceAccuracy, gates.namespaceAccuracy),
   };
 

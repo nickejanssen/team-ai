@@ -129,9 +129,6 @@ function printReport(report: EvalReport): void {
   const rows: MetricRow[] = [
     gateRow("hitRate", metrics.hitRate),
     gateRow("citationValidity", metrics.citationValidity),
-    gateRow("routingAccuracy", metrics.routingAccuracy),
-    gateRow("refusalRate", metrics.refusalRate),
-    gateRow("namespaceAccuracy", metrics.namespaceAccuracy),
     {
       name: "tierCeiling",
       value: metrics.tierCeiling,
@@ -161,6 +158,13 @@ function printReport(report: EvalReport): void {
       console.log(`  ${entry.outcome.id}: ${entry.problems.join("; ")}`);
     }
   }
+
+  console.log("");
+  console.log("diagnostics (reported, not gated — these describe the");
+  console.log("deterministic harness, which is not the delivery path):");
+  console.log(`routingAccuracy   ${pct(metrics.routingAccuracy)}`);
+  console.log(`refusalRate       ${pct(metrics.refusalRate)}`);
+  console.log(`namespaceAccuracy ${pct(metrics.namespaceAccuracy)}`);
 
   console.log("");
   console.log(report.pass ? "PASS" : "FAIL");

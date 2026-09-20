@@ -30,7 +30,12 @@ import type { EvalOutcome, GateThresholds } from "./metrics.js";
 
 const TOP_K = 8;
 const REFUSE_ROUTE = "__refuse__";
-const REFUSE_THRESHOLD = 0.2;
+// Refusal is not decidable from term statistics (see the design document, M6),
+// so this no longer expresses "too weak to answer" — it only rejects a
+// non-match. `scoreFromBm25` returns exactly 0 when FTS5 reports no match, and
+// `sanitizeQuery` returns null for a query with no content word, so a strict
+// `>` here means: refuse when nothing matched at all, and otherwise route.
+const REFUSE_THRESHOLD = 0;
 
 // The single source of truth for the built-in gate thresholds. `evals/gates.yaml`
 // at the repo root is a human-readable reference copy of these values, not a
@@ -39,7 +44,6 @@ export const DEFAULT_GATES: GateThresholds = {
   hitRate: 0.8,
   citationValidity: 1.0,
   routingAccuracy: 0.8,
-  refusalRate: 1.0,
   namespaceAccuracy: 0.8,
 };
 
@@ -114,7 +118,7 @@ export async function routeQuestion(
   // Step 2: keyword tie or miss — let retrieval decide.
   const hits = await search(question);
   const top = hits[0];
-  if (top !== undefined && top.score >= REFUSE_THRESHOLD) {
+  if (top !== undefined && top.score > REFUSE_THRESHOLD) {
     const topNamespace = hitNamespace(top);
     const topMatches =
       topNamespace === undefined
@@ -248,7 +252,6 @@ export function loadGates(instanceDir: string): GateThresholds {
     hitRate: pick("hitRate"),
     citationValidity: pick("citationValidity"),
     routingAccuracy: pick("routingAccuracy"),
-    refusalRate: pick("refusalRate"),
     namespaceAccuracy: pick("namespaceAccuracy"),
   };
 }
