@@ -8,9 +8,21 @@ import { describe, expect, it, vi } from "vitest";
 
 import { emitClaudeCode } from "./claude-code.js";
 import { loadEmitInput } from "./index.js";
+import type { EmitInput } from "./index.js";
 import { run as runEmit } from "../commands/emit.js";
 
 const FIXTURE = fileURLToPath(new URL("./fixtures/instance", import.meta.url));
+
+async function inputWith(agent: { name: string; kb_namespaces: string[] }): Promise<EmitInput> {
+  const input = await loadEmitInput(FIXTURE);
+  const base = input.agents.find((candidate) => candidate.def.kind === "subagent")!;
+  return {
+    ...input,
+    agents: [{ ...base, name: agent.name, def: { ...base.def, ...agent } }],
+  };
+}
+
+const TEST_CORPUS_TOKENS = { operating: 1 };
 
 describe("emitClaudeCode", () => {
   it("writes one agent markdown per agent with parseable front matter", async () => {
@@ -57,6 +69,7 @@ describe("emitClaudeCode — committed layout options", () => {
       filePrefix: "team-ai-",
       pluginManifest: false,
       builtinSearch: true,
+      corpusTokens: TEST_CORPUS_TOKENS,
     });
     expect(written.some((p) => p.endsWith("plugin.json"))).toBe(false);
     const agent = input.agents[0]!;
@@ -86,7 +99,11 @@ describe("emitClaudeCode — committed layout options", () => {
   it("writes the router routing procedure before its original instructions", async () => {
     const input = await loadEmitInput(FIXTURE);
     const out = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-router-"));
-    emitClaudeCode(input, out, { builtinSearch: true, pluginManifest: false });
+    emitClaudeCode(input, out, {
+      builtinSearch: true,
+      pluginManifest: false,
+      corpusTokens: TEST_CORPUS_TOKENS,
+    });
     const router = input.agents.find((a) => a.def.kind === "router")!;
     const raw = readFileSync(join(out, ".claude/agents", `${router.name}.md`), "utf8");
 
@@ -96,6 +113,36 @@ describe("emitClaudeCode — committed layout options", () => {
     expect(raw.indexOf("## Search procedure")).toBeLessThan(
       raw.indexOf("## Original instructions"),
     );
+  });
+
+  it("tells a small-corpus agent to read every document", async () => {
+    const input = await inputWith({
+      name: "knowledge-graph-sme",
+      kb_namespaces: ["knowledge-graph"],
+    });
+    const outDir = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-small-"));
+    const out = emitClaudeCode(input, outDir, {
+      builtinSearch: true,
+      corpusTokens: { "knowledge-graph": 1926 },
+    });
+    const body = readFileSync(out[0]!, "utf8");
+    expect(body).toContain("Read every one of them");
+    expect(body).not.toContain("cli.js search");
+  });
+
+  it("tells a large-corpus agent to use ranked search", async () => {
+    const input = await inputWith({
+      name: "engineering-practice-sme",
+      kb_namespaces: ["engineering-practice"],
+    });
+    const outDir = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-large-"));
+    const out = emitClaudeCode(input, outDir, {
+      builtinSearch: true,
+      corpusTokens: { "engineering-practice": 609458 },
+    });
+    const body = readFileSync(out[0]!, "utf8");
+    expect(body).toContain("cli.js search");
+    expect(body).toContain("--namespace engineering-practice");
   });
 
   it.each(["../", "nested/", "nested\\", "C:\\absolute\\", "/absolute/"])(

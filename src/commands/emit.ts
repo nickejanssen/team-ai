@@ -13,6 +13,8 @@ import { emitClaudeCode } from "../emit/claude-code.js";
 import { emitGeneric } from "../emit/generic.js";
 import { loadEmitInput } from "../emit/index.js";
 import { emitMcpOnly } from "../emit/mcp-only.js";
+import { loadKb } from "../kb/loader.js";
+import { resolveKbScope } from "../retrieval/index-lock.js";
 
 export interface EmitCommandOptions {
   target?: string;
@@ -44,6 +46,24 @@ function isGitIgnored(dir: string, outResolved: string): boolean {
     .some((line) => patterns.has(line));
 }
 
+// Token counts drive the per-domain retrieval strategy in the emitters. A
+// 4-characters-per-token estimate is accurate enough to pick a strategy and
+// costs nothing; the exact figure never matters, only which side of the
+// threshold a namespace falls.
+async function corpusTokensByNamespace(instanceDir: string): Promise<Record<string, number>> {
+  // Let a missing or unreadable KB throw. Reporting zero here would emit
+  // "read your whole corpus" instructions to a 609,000-token domain.
+  const scope = resolveKbScope(instanceDir);
+  const docs = await loadKb(scope.root, { exclude: scope.exclude });
+  const out: Record<string, number> = {};
+  for (const doc of docs) {
+    const namespace = doc.frontmatter.namespace;
+    if (typeof namespace !== "string") continue;
+    out[namespace] = (out[namespace] ?? 0) + Math.ceil(doc.body.length / 4);
+  }
+  return out;
+}
+
 export async function run(opts: EmitCommandOptions): Promise<number> {
   const target = opts.target;
   if (target === undefined) {
@@ -72,12 +92,18 @@ export async function run(opts: EmitCommandOptions): Promise<number> {
     return 1;
   }
 
+  const corpusTokens =
+    target === "claude-code" && opts.builtinSearch === true
+      ? await corpusTokensByNamespace(dir)
+      : undefined;
+
   let written: string[];
   if (target === "claude-code") {
     written = emitClaudeCode(input, outResolved, {
       ...(opts.filePrefix === undefined ? {} : { filePrefix: opts.filePrefix }),
       ...(opts.pluginManifest === undefined ? {} : { pluginManifest: opts.pluginManifest }),
       ...(opts.builtinSearch === undefined ? {} : { builtinSearch: opts.builtinSearch }),
+      ...(corpusTokens === undefined ? {} : { corpusTokens }),
     });
   } else if (target === "mcp-only") written = emitMcpOnly(input, outResolved);
   else written = emitGeneric(input, outResolved);
