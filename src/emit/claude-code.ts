@@ -11,6 +11,7 @@ import { dirname } from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 
 import { resolveWithin } from "../generator/contain.js";
+import type { ModelTier } from "../schema/types.js";
 import { packageVersion } from "../version.js";
 import type { EmitAgent, EmitInput } from "./index.js";
 
@@ -46,6 +47,17 @@ function write(outDir: string, rel: string, content: string): string {
 }
 
 const READ_ALL_TOKEN_LIMIT = 25_000;
+
+// Claude Code reads `model`; `model_tier` is team-ai's own vocabulary and is
+// inert to the host. Mapping one onto the other is what makes a declared cost
+// tier real. `none` means the work needs no model judgement at all, so it takes
+// the cheapest tier rather than being omitted. An absent `model` inherits the
+// session default, which is the expensive outcome this mapping avoids.
+const MODEL_FOR_TIER: Record<ModelTier, string> = {
+  none: "haiku",
+  small: "haiku",
+  large: "sonnet",
+};
 
 function searchSection(agent: EmitAgent, corpusTokens: Record<string, number> | undefined): string {
   const common = [
@@ -130,6 +142,7 @@ function frontMatter(input: EmitInput["agents"][number], opts: EmitClaudeCodeOpt
     tools: tools.join(", "),
     kind: input.def.kind,
     model_tier: input.def.model_tier,
+    model: MODEL_FOR_TIER[input.def.model_tier],
     kb_namespaces: input.def.kb_namespaces,
     max_hops: input.def.max_hops,
   };

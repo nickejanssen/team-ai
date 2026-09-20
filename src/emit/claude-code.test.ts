@@ -10,10 +10,15 @@ import { emitClaudeCode } from "./claude-code.js";
 import { loadEmitInput } from "./index.js";
 import type { EmitInput } from "./index.js";
 import { run as runEmit } from "../commands/emit.js";
+import type { ModelTier } from "../schema/types.js";
 
 const FIXTURE = fileURLToPath(new URL("./fixtures/instance", import.meta.url));
 
-async function inputWith(agent: { name: string; kb_namespaces: string[] }): Promise<EmitInput> {
+async function inputWith(agent: {
+  name: string;
+  kb_namespaces: string[];
+  model_tier?: ModelTier;
+}): Promise<EmitInput> {
   const input = await loadEmitInput(FIXTURE);
   const base = input.agents.find((candidate) => candidate.def.kind === "subagent")!;
   return {
@@ -80,7 +85,7 @@ describe("emitClaudeCode — committed layout options", () => {
       model?: string;
     };
     expect(front.name).toBe(agent.def.name);
-    expect(front.model).toBeUndefined();
+    expect(front.model).toBe("haiku");
     expect(front.tools).toBe("Read, Grep, Glob");
     const searchProcedure = raw.indexOf("## Search procedure");
     expect(searchProcedure).toBeGreaterThanOrEqual(0);
@@ -139,6 +144,42 @@ describe("emitClaudeCode — committed layout options", () => {
     const body = readFileSync(out[0]!, "utf8");
     expect(body).toContain("cli.js search");
     expect(body).toContain("--namespace engineering-practice");
+  });
+
+  it("maps the model tier onto the host's model field", async () => {
+    const input = await inputWith({
+      name: "billing-sme",
+      kb_namespaces: ["operating"],
+      model_tier: "small",
+    });
+    const outDir = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-model-"));
+    const out = emitClaudeCode(input, outDir, {
+      builtinSearch: true,
+      corpusTokens: TEST_CORPUS_TOKENS,
+    });
+    const body = readFileSync(out[0]!, "utf8");
+    expect(body).toMatch(/^model: \S+$/m);
+    expect(body).toContain("model_tier: small");
+  });
+
+  it("gives a large-tier agent a different model from a small-tier one", async () => {
+    const small = await inputWith({
+      name: "billing-small",
+      kb_namespaces: ["operating"],
+      model_tier: "small",
+    });
+    const large = await inputWith({
+      name: "billing-large",
+      kb_namespaces: ["operating"],
+      model_tier: "large",
+    });
+    const smallDir = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-model-small-"));
+    const largeDir = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-model-large-"));
+    const options = { builtinSearch: true, corpusTokens: TEST_CORPUS_TOKENS };
+    const smallBody = readFileSync(emitClaudeCode(small, smallDir, options)[0]!, "utf8");
+    const largeBody = readFileSync(emitClaudeCode(large, largeDir, options)[0]!, "utf8");
+    const pick = (body: string): string | undefined => /^model: (\S+)$/m.exec(body)?.[1];
+    expect(pick(smallBody)).not.toBe(pick(largeBody));
   });
 
   it("omits the original instructions in builtin-search mode", async () => {
