@@ -1,6 +1,6 @@
 import { rmSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
-import { LexicalAdapter } from "./lexical.js";
+import { LexicalAdapter, sanitizeQuery } from "./lexical.js";
 
 const DB = ".tmp-test/lex.sqlite";
 afterEach(() => rmSync(".tmp-test", { recursive: true, force: true }));
@@ -8,6 +8,26 @@ afterEach(() => rmSync(".tmp-test", { recursive: true, force: true }));
 function adapter(): LexicalAdapter {
   return new LexicalAdapter({ kbRoot: "src/kb/fixtures/kb", dbPath: DB });
 }
+
+describe("sanitizeQuery", () => {
+  it("keeps every token when the query has at least one content word", () => {
+    expect(sanitizeQuery("the 429 errors")).toBe('"the" OR "429" OR "errors"');
+  });
+
+  it("returns null when every token is a stopword", () => {
+    expect(sanitizeQuery("how does the of a to and it")).toBeNull();
+  });
+
+  it("returns null for empty input", () => {
+    expect(sanitizeQuery("   ")).toBeNull();
+  });
+
+  it("keeps hyphenated and numeric terms", () => {
+    expect(sanitizeQuery("the 429 rate-limit errors")).toBe(
+      '"the" OR "429" OR "rate-limit" OR "errors"',
+    );
+  });
+});
 
 describe("LexicalAdapter", () => {
   it("indexes and ranks the rate-limits doc first for a 429 query", async () => {

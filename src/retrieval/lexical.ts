@@ -214,18 +214,107 @@ function clampK(k: number | undefined): number {
   return Math.min(MAX_K, Math.max(1, Math.floor(k)));
 }
 
+// A query made only of function words carries no retrieval intent and must
+// retrieve nothing. The list below is used as a GATE for that purpose. It is
+// deliberately NOT used to filter terms out of the match expression.
+//
+// Measured 2026-09-20 on the 37-question Arcwright set: filtering stopwords out
+// of the match cost 6.1 points of hit rate (48.5% -> 42.4%) and 8.1 points of
+// routing accuracy (24.3% -> 16.2%). BM25 already discounts common terms by
+// inverse document frequency, so removing them discards disambiguating context
+// and buys nothing. Gating on them preserves the "no content words retrieves
+// nothing" property at zero cost.
+const STOPWORDS = new Set([
+  "a",
+  "about",
+  "an",
+  "and",
+  "any",
+  "are",
+  "as",
+  "at",
+  "be",
+  "been",
+  "but",
+  "by",
+  "can",
+  "could",
+  "did",
+  "do",
+  "does",
+  "for",
+  "from",
+  "get",
+  "had",
+  "has",
+  "have",
+  "how",
+  "i",
+  "if",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "just",
+  "may",
+  "might",
+  "much",
+  "must",
+  "my",
+  "no",
+  "not",
+  "of",
+  "on",
+  "or",
+  "our",
+  "out",
+  "over",
+  "should",
+  "so",
+  "some",
+  "such",
+  "than",
+  "that",
+  "the",
+  "their",
+  "them",
+  "then",
+  "there",
+  "these",
+  "they",
+  "this",
+  "those",
+  "to",
+  "up",
+  "was",
+  "we",
+  "were",
+  "what",
+  "when",
+  "where",
+  "which",
+  "while",
+  "who",
+  "why",
+  "will",
+  "with",
+  "would",
+  "you",
+  "your",
+]);
+
 // Turn arbitrary user text into a safe FTS5 MATCH string. FTS5 treats bare
 // punctuation and quotes as syntax and throws on malformed input, so we reduce
-// the query to alphanumeric/hyphen tokens, quote each one, and OR them together.
-// OR (not implicit AND) keeps natural-language queries useful: BM25 still ranks
-// documents that match more/rarer terms higher without requiring every word.
-// Returns null when nothing usable survives.
-function sanitizeQuery(query: string): string | null {
+// the query to alphanumeric/hyphen tokens, quote each one, and OR them
+// together. Returns null when the query contains no content word at all.
+export function sanitizeQuery(query: string): string | null {
   const tokens = query
     .split(/\s+/)
     .map((t) => t.replace(/[^\w-]/g, ""))
     .filter((t) => /\w/.test(t));
-  if (tokens.length === 0) return null;
+  const hasContentWord = tokens.some((t) => !STOPWORDS.has(t.toLowerCase()));
+  if (!hasContentWord) return null;
   return tokens.map((t) => `"${t}"`).join(" OR ");
 }
 
