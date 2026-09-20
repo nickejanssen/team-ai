@@ -57,7 +57,7 @@ function searchSection(agent: EmitAgent, corpusTokens: Record<string, number> | 
   if (agent.def.kind === "router") {
     return [
       ...common,
-      "Use Read, Grep, and Glob to search it. The tool names under Original instructions are unavailable.",
+      "Use Read, Grep, and Glob to search it.",
       "- Read `team-ai/manifest.yaml`.",
       "- Match keywords and description, excluding `not_owned`.",
       "- If exactly one domain matches, hand off to its subagent.",
@@ -82,7 +82,6 @@ function searchSection(agent: EmitAgent, corpusTokens: Record<string, number> | 
     return [
       ...common,
       "Use Read, Grep, and Glob.",
-      "The tool names under Original instructions are unavailable.",
       "",
       listing,
       "",
@@ -121,7 +120,7 @@ function frontMatter(input: EmitInput["agents"][number], opts: EmitClaudeCodeOpt
   };
   const body =
     opts.builtinSearch === true
-      ? `${searchSection(input, opts.corpusTokens)}\n\n## Original instructions\n\n${input.instructions.trim()}`.trim()
+      ? searchSection(input, opts.corpusTokens)
       : input.instructions.trim();
   return `---\n${stringifyYaml(meta)}---\n\n${body}${body.length > 0 ? "\n" : ""}`;
 }

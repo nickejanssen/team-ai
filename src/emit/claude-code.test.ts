@@ -83,14 +83,12 @@ describe("emitClaudeCode — committed layout options", () => {
     expect(front.model).toBeUndefined();
     expect(front.tools).toBe("Read, Grep, Glob");
     const searchProcedure = raw.indexOf("## Search procedure");
-    const originalInstructions = raw.indexOf("## Original instructions");
     expect(searchProcedure).toBeGreaterThanOrEqual(0);
-    expect(searchProcedure).toBeLessThan(originalInstructions);
+    expect(raw).not.toContain("Original instructions");
     expect(raw).toContain(
       "The knowledge base is the Markdown under the KB root in `team-ai/index.lock`.",
     );
     expect(raw).toContain("Use Read, Grep, and Glob");
-    expect(raw).toContain("tool names under Original instructions are unavailable");
     for (const ns of agent.def.kb_namespaces) {
       expect(raw).toContain(`search the KB root for \`^namespace: ${ns}\` to list your documents`);
     }
@@ -110,9 +108,7 @@ describe("emitClaudeCode — committed layout options", () => {
     expect(raw).toContain("Read `team-ai/manifest.yaml`");
     expect(raw).toContain("excluding `not_owned`");
     expect(raw).toContain("at most one hop");
-    expect(raw.indexOf("## Search procedure")).toBeLessThan(
-      raw.indexOf("## Original instructions"),
-    );
+    expect(raw).not.toContain("Original instructions");
   });
 
   it("tells a small-corpus agent to read every document", async () => {
@@ -143,6 +139,26 @@ describe("emitClaudeCode — committed layout options", () => {
     const body = readFileSync(out[0]!, "utf8");
     expect(body).toContain("cli.js search");
     expect(body).toContain("--namespace engineering-practice");
+  });
+
+  it("omits the original instructions in builtin-search mode", async () => {
+    const input = await inputWith({ name: "billing-sme", kb_namespaces: ["operating"] });
+    const outDir = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-no-original-"));
+    const out = emitClaudeCode(input, outDir, {
+      builtinSearch: true,
+      corpusTokens: TEST_CORPUS_TOKENS,
+    });
+    const body = readFileSync(out[0]!, "utf8");
+    expect(body).not.toContain("Original instructions");
+    expect(body).not.toContain("kb_search");
+    expect(body).toContain("## Search procedure");
+  });
+
+  it("keeps the original instructions when not in builtin-search mode", async () => {
+    const input = await inputWith({ name: "billing-sme", kb_namespaces: ["operating"] });
+    const outDir = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-original-"));
+    const out = emitClaudeCode(input, outDir, { builtinSearch: false });
+    expect(readFileSync(out[0]!, "utf8")).toContain("kb_search");
   });
 
   it.each(["../", "nested/", "nested\\", "C:\\absolute\\", "/absolute/"])(
