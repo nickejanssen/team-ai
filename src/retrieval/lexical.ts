@@ -141,6 +141,7 @@ export class LexicalAdapter implements RetrievalAdapter {
   private searchSync(query: string, opts: SearchOpts): Hit[] {
     const match = sanitizeQuery(query);
     if (match === null) return [];
+    const termCount = match.split(" OR ").length;
 
     // Fail clearly (and without creating a stray empty db file) when search runs
     // before the first reindex.
@@ -178,7 +179,7 @@ export class LexicalAdapter implements RetrievalAdapter {
       chunk_id: row.chunk_id,
       path: row.path,
       heading_path: row.heading_path,
-      score: scoreFromBm25(row.bm25),
+      score: scoreFromBm25(row.bm25, termCount),
       text: row.text,
       metadata: meta,
     }));
@@ -353,24 +354,20 @@ function passesFilters(meta: ChunkMeta, opts: SearchOpts): boolean {
 // Score normalization (documented formula):
 //   FTS5 bm25() is negative for a match and more negative = more relevant; a
 //   non-match or a value >= 0 scores 0.
-//   Let rel = -bm25 (positive; larger = better). Then:
-//     score = rel / (rel + BM25_K)
-//   This is ABSOLUTE, not min-anchored across the result set: a weak top hit
-//   scores low (so the 0.2 "cite or refuse" threshold downstream stays
-//   meaningful), and a genuinely-relevant 2nd result keeps a real score instead
-//   of being crushed to 0 by min-max normalization.
-//
-// BM25_K = 3 was tuned against the fixture KB (observed scores):
-//   - search("what to do about 429 rate limit errors") top hit 0.63  (> 0.55)
-//   - search("team")  (single common word)             top hit 0.31  (< 0.4)
-//   - search("the")   (stopword-frequency term)        bm25 >= 0 -> score 0
-//   - search("kubernetes helm chart deployment") (absent) -> [] (no FTS match)
-const BM25_K = 3;
+//   Let rel = -bm25 (positive; larger = better), and n = the number of terms in
+//   the sanitized query. BM25 sums a contribution per matched term, so rel grows
+//   with query length; dividing by n makes the score describe per-term relevance
+//   and therefore comparable across queries of different lengths. Without this,
+//   a long question of ordinary words outscores a short precise one and the
+//   "cite or refuse" threshold becomes unreachable.
+//     score = (rel / n) / ((rel / n) + BM25_K)
+const BM25_K = 1.5;
 
-function scoreFromBm25(bm25: number): number {
+export function scoreFromBm25(bm25: number, termCount: number): number {
   const rel = -bm25;
   if (rel <= 0) return 0;
-  return Math.min(1, Math.max(0, rel / (rel + BM25_K)));
+  const perTerm = rel / Math.max(1, termCount);
+  return Math.min(1, Math.max(0, perTerm / (perTerm + BM25_K)));
 }
 
 // Slice `body` to a single `## `/`### ` section: from the matching heading line
