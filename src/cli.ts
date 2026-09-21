@@ -342,7 +342,8 @@ export function buildProgram(): Command {
           "--allow-tracked",
           "emitted output is intentionally committed; skip the gitignore warning",
           false,
-        );
+        )
+        .option("--search-command <cmd>", "command used by generated agents for ranked search");
     },
     run: emit.run,
   });

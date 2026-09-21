@@ -24,6 +24,7 @@ export interface EmitCommandOptions {
   pluginManifest?: boolean;
   builtinSearch?: boolean;
   allowTracked?: boolean;
+  searchCommand?: string;
 }
 
 const TARGETS = ["claude-code", "mcp-only", "generic"] as const;
@@ -103,6 +104,7 @@ export async function run(opts: EmitCommandOptions): Promise<number> {
       ...(opts.filePrefix === undefined ? {} : { filePrefix: opts.filePrefix }),
       ...(opts.pluginManifest === undefined ? {} : { pluginManifest: opts.pluginManifest }),
       ...(opts.builtinSearch === undefined ? {} : { builtinSearch: opts.builtinSearch }),
+      ...(opts.searchCommand === undefined ? {} : { searchCommand: opts.searchCommand }),
       ...(corpusTokens === undefined ? {} : { corpusTokens }),
     });
   } else if (target === "mcp-only") written = emitMcpOnly(input, outResolved);
