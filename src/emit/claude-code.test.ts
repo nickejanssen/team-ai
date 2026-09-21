@@ -128,6 +128,7 @@ describe("emitClaudeCode — committed layout options", () => {
     });
     const body = readFileSync(out[0]!, "utf8");
     expect(body).toContain("Read every one of those documents");
+    expect(body).not.toMatch(/^tools: .*\bBash\b/m);
     // No token count: an exact figure would couple every agent file to every
     // KB document and break the regeneration check on any docs edit.
     expect(body).not.toMatch(/about [\d,]+ tokens/);
@@ -146,6 +147,9 @@ describe("emitClaudeCode — committed layout options", () => {
     });
     const body = readFileSync(out[0]!, "utf8");
     expect(body).toContain("cli.js search");
+    // An agent told to run a command needs a tool that can run it. The host's
+    // permission file pre-authorises the command; it does not grant the tool.
+    expect(body).toMatch(/^tools: .*\bBash\b/m);
     expect(body).toContain("--namespace engineering-practice");
   });
 
