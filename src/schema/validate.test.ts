@@ -37,6 +37,22 @@ describe("frontmatter schema", () => {
     expect(r.ok).toBe(true);
   });
 
+  it("allows instance extension fields under the x- prefix", () => {
+    const r = validate("frontmatter", {
+      ...MINIMAL_FRONTMATTER,
+      "x-scope-evidence": "none",
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("still rejects a misspelled core field", () => {
+    const r = validate("frontmatter", {
+      ...MINIMAL_FRONTMATTER,
+      reviewby: "2027-01-01",
+    });
+    expect(r.ok).toBe(false);
+  });
+
   it("rejects an unknown status with a path-anchored message", () => {
     const r = validate("frontmatter", {
       id: "x.a.b",
@@ -80,6 +96,36 @@ describe("frontmatter schema", () => {
       },
     });
     expect(r.ok).toBe(true);
+  });
+});
+
+describe("golden schema provenance fields", () => {
+  const base = {
+    id: "eval.kg.example",
+    question: "Where is second-hand knowledge recorded?",
+    expect_namespace: "knowledge-graph",
+    expect_paths: ["architecture/04-knowledge-graph.md"],
+    expect_route: "knowledge-graph-sme",
+    expect_tier_max: "small",
+    must_cite: true,
+  };
+
+  it("accepts the original seven fields alone", () => {
+    expect(validate("golden", base).ok).toBe(true);
+  });
+
+  it("accepts provenance and answer evidence", () => {
+    const withProvenance = {
+      ...base,
+      source_path: "architecture/04-knowledge-graph.md",
+      generated_on: "2026-09-20",
+      answer_evidence: "who knows what, when they learned it, and from whom",
+    };
+    expect(validate("golden", withProvenance).ok).toBe(true);
+  });
+
+  it("still rejects an unknown field", () => {
+    expect(validate("golden", { ...base, sorce_path: "x" }).ok).toBe(false);
   });
 });
 

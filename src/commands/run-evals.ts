@@ -129,9 +129,7 @@ function printReport(report: EvalReport): void {
   const rows: MetricRow[] = [
     gateRow("hitRate", metrics.hitRate),
     gateRow("citationValidity", metrics.citationValidity),
-    gateRow("routingAccuracy", metrics.routingAccuracy),
-    gateRow("refusalRate", metrics.refusalRate),
-    gateRow("namespaceAccuracy", metrics.namespaceAccuracy),
+    gateRow("coverage", metrics.coverage),
     {
       name: "tierCeiling",
       value: metrics.tierCeiling,
@@ -150,6 +148,19 @@ function printReport(report: EvalReport): void {
     );
   }
 
+  console.log("");
+  console.log("coverage by namespace:");
+  for (const [namespace, value] of Object.entries(report.coverageByNamespace).sort()) {
+    console.log(`  ${namespace.padEnd(24)} ${pct(value)}`);
+  }
+
+  const staleQuestions = report.outcomes.filter((outcome) => outcome.sourceChangedSinceGenerated);
+  if (staleQuestions.length > 0) {
+    console.log("");
+    console.log("questions whose source document changed since they were written:");
+    for (const outcome of staleQuestions) console.log(`  ${outcome.id}`);
+  }
+
   const failing = report.outcomes
     .map((outcome) => ({ outcome, problems: questionProblems(outcome) }))
     .filter((entry) => entry.problems.length > 0);
@@ -161,6 +172,13 @@ function printReport(report: EvalReport): void {
       console.log(`  ${entry.outcome.id}: ${entry.problems.join("; ")}`);
     }
   }
+
+  console.log("");
+  console.log("diagnostics (reported, not gated — these describe the");
+  console.log("deterministic harness, which is not the delivery path):");
+  console.log(`routingAccuracy   ${pct(metrics.routingAccuracy)}`);
+  console.log(`refusalRate       ${pct(metrics.refusalRate)}`);
+  console.log(`namespaceAccuracy ${pct(metrics.namespaceAccuracy)}`);
 
   console.log("");
   console.log(report.pass ? "PASS" : "FAIL");

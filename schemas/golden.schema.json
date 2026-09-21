@@ -26,6 +26,9 @@
       "type": "string",
       "enum": ["none", "small", "large"]
     },
-    "must_cite": { "type": "boolean" }
+    "must_cite": { "type": "boolean" },
+    "source_path": { "type": "string" },
+    "generated_on": { "type": "string", "format": "date" },
+    "answer_evidence": { "type": "string" }
   }
 }

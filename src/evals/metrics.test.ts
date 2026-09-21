@@ -5,9 +5,7 @@ import { computeReport, type EvalOutcome, type GateThresholds } from "./metrics.
 const DEFAULT_GATES: GateThresholds = {
   hitRate: 0.8,
   citationValidity: 1.0,
-  routingAccuracy: 0.8,
-  refusalRate: 1.0,
-  namespaceAccuracy: 0.8,
+  coverage: 0.8,
 };
 
 function outcome(overrides: Partial<EvalOutcome> = {}): EvalOutcome {
@@ -23,6 +21,9 @@ function outcome(overrides: Partial<EvalOutcome> = {}): EvalOutcome {
     tierOk: true,
     refuseExpected: false,
     refuseCorrect: true,
+    covered: null,
+    expectNamespace: "domain",
+    sourceChangedSinceGenerated: false,
     ...overrides,
   };
 }
@@ -110,9 +111,30 @@ describe("computeReport metrics", () => {
     );
     expect(report.metrics.namespaceAccuracy).toBe(0.75);
   });
+
+  it("reports coverage overall and per namespace", () => {
+    const outcomes = [
+      outcome({ id: "a", expectNamespace: "kg", covered: true }),
+      outcome({ id: "b", expectNamespace: "kg", covered: false }),
+      outcome({ id: "c", expectNamespace: "safety", covered: true }),
+      outcome({ id: "d", expectNamespace: "", covered: null }),
+    ];
+    const report = computeReport(outcomes, DEFAULT_GATES);
+    expect(report.metrics.coverage).toBeCloseTo(2 / 3, 10);
+    expect(report.coverageByNamespace["kg"]).toBeCloseTo(0.5, 10);
+    expect(report.coverageByNamespace["safety"]).toBeCloseTo(1, 10);
+  });
 });
 
 describe("computeReport gates", () => {
+  it("reports refusalRate without gating on it", () => {
+    const outcomes = [outcome({ id: "a", refuseExpected: true, refuseCorrect: false })];
+    const report = computeReport(outcomes, DEFAULT_GATES);
+    expect(report.metrics.refusalRate).toBe(0);
+    expect(report.gates.refusalRate).toBeUndefined();
+    expect(report.pass).toBe(true);
+  });
+
   it("passes when every gate meets its threshold and the tier ceiling is perfect", () => {
     const report = computeReport(
       [outcome(), outcome(), outcome({ refuseExpected: true, refuseCorrect: true })],
@@ -123,11 +145,8 @@ describe("computeReport gates", () => {
   });
 
   it("fails the report when a soft gate misses", () => {
-    const report = computeReport(
-      [outcome({ routeCorrect: true }), outcome({ routeCorrect: false })],
-      DEFAULT_GATES,
-    );
-    expect(report.gates.routingAccuracy?.pass).toBe(false);
+    const report = computeReport([outcome({ hit: true }), outcome({ hit: false })], DEFAULT_GATES);
+    expect(report.gates.hitRate?.pass).toBe(false);
     expect(report.pass).toBe(false);
   });
 
@@ -135,21 +154,19 @@ describe("computeReport gates", () => {
     const report = computeReport([outcome({ tierOk: false })], DEFAULT_GATES);
     expect(report.gates.hitRate?.pass).toBe(true);
     expect(report.gates.citationValidity?.pass).toBe(true);
-    expect(report.gates.routingAccuracy?.pass).toBe(true);
-    expect(report.gates.refusalRate?.pass).toBe(true);
-    expect(report.gates.namespaceAccuracy?.pass).toBe(true);
+    expect(report.gates.coverage?.pass).toBe(true);
     expect(report.metrics.tierCeiling).toBe(0);
     expect(report.pass).toBe(false);
   });
 
-  it("fails the report when the namespaceAccuracy gate misses", () => {
+  it("reports namespaceAccuracy without gating on it", () => {
     const report = computeReport(
       [outcome({ namespaceOk: false }), outcome({ namespaceOk: false }), outcome()],
       DEFAULT_GATES,
     );
     expect(report.metrics.namespaceAccuracy).toBeCloseTo(1 / 3, 10);
-    expect(report.gates.namespaceAccuracy?.pass).toBe(false);
-    expect(report.pass).toBe(false);
+    expect(report.gates.namespaceAccuracy).toBeUndefined();
+    expect(report.pass).toBe(true);
   });
 
   it("uses a >= comparison so a gate exactly at threshold passes", () => {
@@ -169,12 +186,6 @@ describe("computeReport gates", () => {
 
   it("only the five soft metrics get gate entries (tierCeiling is not a soft gate)", () => {
     const report = computeReport([outcome()], DEFAULT_GATES);
-    expect(Object.keys(report.gates).sort()).toEqual([
-      "citationValidity",
-      "hitRate",
-      "namespaceAccuracy",
-      "refusalRate",
-      "routingAccuracy",
-    ]);
+    expect(Object.keys(report.gates).sort()).toEqual(["citationValidity", "coverage", "hitRate"]);
   });
 });

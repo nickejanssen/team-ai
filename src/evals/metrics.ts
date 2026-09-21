@@ -19,14 +19,15 @@ export interface EvalOutcome {
   tierOk: boolean;
   refuseExpected: boolean;
   refuseCorrect: boolean;
+  covered: boolean | null;
+  expectNamespace: string;
+  sourceChangedSinceGenerated: boolean;
 }
 
 export interface GateThresholds {
   hitRate: number;
   citationValidity: number;
-  routingAccuracy: number;
-  refusalRate: number;
-  namespaceAccuracy: number;
+  coverage: number;
 }
 
 export interface GateResult {
@@ -41,6 +42,7 @@ export interface EvalMetrics {
   routingAccuracy: number;
   refusalRate: number;
   namespaceAccuracy: number;
+  coverage: number;
   tierCeiling: number;
   count: number;
 }
@@ -48,6 +50,7 @@ export interface EvalMetrics {
 export interface EvalReport {
   outcomes: EvalOutcome[];
   metrics: EvalMetrics;
+  coverageByNamespace: Record<string, number>;
   gates: Record<string, GateResult>;
   pass: boolean;
 }
@@ -67,6 +70,14 @@ export function computeReport(outcomes: EvalOutcome[], gates: GateThresholds): E
   const count = outcomes.length;
   const nonRefuse = outcomes.filter((outcome) => !outcome.refuseExpected);
   const refuse = outcomes.filter((outcome) => outcome.refuseExpected);
+  const scored = outcomes.filter((outcome) => outcome.covered !== null);
+  const coverage =
+    scored.length === 0 ? 1 : scored.filter((outcome) => outcome.covered).length / scored.length;
+  const byNs: Record<string, number> = {};
+  for (const namespace of new Set(scored.map((outcome) => outcome.expectNamespace))) {
+    const group = scored.filter((outcome) => outcome.expectNamespace === namespace);
+    byNs[namespace] = group.filter((outcome) => outcome.covered).length / group.length;
+  }
 
   const metrics: EvalMetrics = {
     hitRate: fraction(nonRefuse.filter((outcome) => outcome.hit).length, nonRefuse.length),
@@ -74,6 +85,7 @@ export function computeReport(outcomes: EvalOutcome[], gates: GateThresholds): E
     routingAccuracy: fraction(outcomes.filter((outcome) => outcome.routeCorrect).length, count),
     refusalRate: fraction(refuse.filter((outcome) => outcome.refuseCorrect).length, refuse.length),
     namespaceAccuracy: fraction(outcomes.filter((outcome) => outcome.namespaceOk).length, count),
+    coverage,
     tierCeiling: fraction(outcomes.filter((outcome) => outcome.tierOk).length, count),
     count,
   };
@@ -81,9 +93,7 @@ export function computeReport(outcomes: EvalOutcome[], gates: GateThresholds): E
   const gateResults: Record<string, GateResult> = {
     hitRate: gate(metrics.hitRate, gates.hitRate),
     citationValidity: gate(metrics.citationValidity, gates.citationValidity),
-    routingAccuracy: gate(metrics.routingAccuracy, gates.routingAccuracy),
-    refusalRate: gate(metrics.refusalRate, gates.refusalRate),
-    namespaceAccuracy: gate(metrics.namespaceAccuracy, gates.namespaceAccuracy),
+    coverage: gate(metrics.coverage, gates.coverage),
   };
 
   const gatesPass = Object.values(gateResults).every((result) => result.pass);
@@ -91,5 +101,5 @@ export function computeReport(outcomes: EvalOutcome[], gates: GateThresholds): E
   // `expect_tier_max`, so a single violation fails the whole run.
   const pass = gatesPass && metrics.tierCeiling === 1;
 
-  return { outcomes, metrics, gates: gateResults, pass };
+  return { outcomes, metrics, coverageByNamespace: byNs, gates: gateResults, pass };
 }

@@ -98,6 +98,9 @@ export interface GoldenQuestion {
   expect_route: string;
   expect_tier_max: ModelTier;
   must_cite: boolean;
+  source_path?: string;
+  generated_on?: string;
+  answer_evidence?: string;
 }
 
 export interface SpokeDomain {
