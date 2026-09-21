@@ -47,6 +47,11 @@ function write(outDir: string, rel: string, content: string): string {
   return path;
 }
 
+// The threshold decides the strategy; the emitted text deliberately states no
+// token count. An exact count makes every generated agent a function of every
+// KB document, so a seven-character edit to one document changes an agent file
+// and fails the regeneration check. The number carried no decision value for
+// the agent either way — the strategy is already chosen for it here.
 const READ_ALL_TOKEN_LIMIT = 25_000;
 const DEFAULT_SEARCH_COMMAND = "node ../team-ai/dist/cli.js";
 
@@ -118,7 +123,7 @@ function searchSection(
       "",
       listing,
       "",
-      `Your whole corpus is about ${total.toLocaleString()} tokens. Read every one of them before answering — do not guess which is relevant, and do not answer from a grep match alone.`,
+      "Your whole corpus is small enough to read in full. Read every one of those documents before answering — do not guess which is relevant, and do not answer from a grep match alone.",
       "",
       "Answer only from those documents, citing paths. If they do not answer the question, say so and name the owner.",
     ].join("\n");
@@ -127,7 +132,7 @@ function searchSection(
   const namespaceFlags = namespaces.map((namespace) => `--namespace ${namespace}`).join(" ");
   return [
     ...common,
-    `Your corpus is about ${total.toLocaleString()} tokens — far too large to read. Use ranked search:`,
+    "Your corpus is far too large to read in full. Use ranked search:",
     "",
     "```bash",
     `${searchCommand} search "<the question, in full>" --root team-ai ${namespaceFlags} --k 8`,

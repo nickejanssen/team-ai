@@ -127,7 +127,10 @@ describe("emitClaudeCode — committed layout options", () => {
       corpusTokens: { "knowledge-graph": 1926 },
     });
     const body = readFileSync(out[0]!, "utf8");
-    expect(body).toContain("Read every one of them");
+    expect(body).toContain("Read every one of those documents");
+    // No token count: an exact figure would couple every agent file to every
+    // KB document and break the regeneration check on any docs edit.
+    expect(body).not.toMatch(/about [\d,]+ tokens/);
     expect(body).not.toContain("cli.js search");
   });
 
