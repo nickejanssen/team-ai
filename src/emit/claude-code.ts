@@ -20,6 +20,7 @@ export interface EmitClaudeCodeOptions {
   pluginManifest?: boolean;
   builtinSearch?: boolean;
   corpusTokens?: Record<string, number>;
+  searchCommand?: string;
 }
 
 const BUILTIN_SEARCH_TOOLS = ["Read", "Grep", "Glob"];
@@ -47,6 +48,7 @@ function write(outDir: string, rel: string, content: string): string {
 }
 
 const READ_ALL_TOKEN_LIMIT = 25_000;
+const DEFAULT_SEARCH_COMMAND = "node ../team-ai/dist/cli.js";
 
 // Claude Code reads `model`; `model_tier` is team-ai's own vocabulary and is
 // inert to the host. Mapping one onto the other is what makes a declared cost
@@ -59,7 +61,11 @@ const MODEL_FOR_TIER: Record<ModelTier, string> = {
   large: "sonnet",
 };
 
-function searchSection(agent: EmitAgent, corpusTokens: Record<string, number> | undefined): string {
+function searchSection(
+  agent: EmitAgent,
+  corpusTokens: Record<string, number> | undefined,
+  searchCommand: string,
+): string {
   const common = [
     "## Search procedure",
     "",
@@ -124,7 +130,7 @@ function searchSection(agent: EmitAgent, corpusTokens: Record<string, number> | 
     `Your corpus is about ${total.toLocaleString()} tokens — far too large to read. Use ranked search:`,
     "",
     "```bash",
-    `node ../team-ai/dist/cli.js search "<the question, in full>" --root team-ai ${namespaceFlags} --k 8`,
+    `${searchCommand} search "<the question, in full>" --root team-ai ${namespaceFlags} --k 8`,
     "```",
     "",
     "Read the files behind the top hits, then answer only from them, citing paths.",
@@ -148,7 +154,7 @@ function frontMatter(input: EmitInput["agents"][number], opts: EmitClaudeCodeOpt
   };
   const body =
     opts.builtinSearch === true
-      ? searchSection(input, opts.corpusTokens)
+      ? searchSection(input, opts.corpusTokens, opts.searchCommand ?? DEFAULT_SEARCH_COMMAND)
       : input.instructions.trim();
   return `---\n${stringifyYaml(meta)}---\n\n${body}${body.length > 0 ? "\n" : ""}`;
 }

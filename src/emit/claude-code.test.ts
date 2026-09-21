@@ -146,6 +146,22 @@ describe("emitClaudeCode — committed layout options", () => {
     expect(body).toContain("--namespace engineering-practice");
   });
 
+  it("uses a caller-supplied search command for large corpora", async () => {
+    const input = await inputWith({
+      name: "engineering-practice-sme",
+      kb_namespaces: ["engineering-practice"],
+    });
+    const outDir = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-search-command-"));
+    const out = emitClaudeCode(input, outDir, {
+      builtinSearch: true,
+      corpusTokens: { "engineering-practice": 609458 },
+      searchCommand: "python scripts/team_ai_cli.py",
+    });
+    const body = readFileSync(out[0]!, "utf8");
+    expect(body).toContain('python scripts/team_ai_cli.py search "<the question, in full>"');
+    expect(body).not.toContain("node ../team-ai/dist/cli.js");
+  });
+
   it("maps the model tier onto the host's model field", async () => {
     const input = await inputWith({
       name: "billing-sme",
