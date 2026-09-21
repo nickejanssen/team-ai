@@ -24,6 +24,12 @@ export interface EmitClaudeCodeOptions {
 }
 
 const BUILTIN_SEARCH_TOOLS = ["Read", "Grep", "Glob"];
+
+// An agent told to run the ranked-search command needs a tool that can run it.
+// Listing the command in the host's permission file pre-authorises it; it does
+// not grant the tool. Without this, the agents holding the largest corpora are
+// instructed to use their only viable retrieval strategy and cannot execute it.
+const RANKED_SEARCH_TOOLS = [...BUILTIN_SEARCH_TOOLS, "Bash"];
 const INVALID_FILE_PREFIX = /[<>:"/\\|?*]/;
 
 function validateFilePrefix(filePrefix: string | undefined): void {
@@ -65,6 +71,22 @@ const MODEL_FOR_TIER: Record<ModelTier, string> = {
   small: "haiku",
   large: "sonnet",
 };
+
+// The single source of truth for "this agent will be told to run ranked search".
+// `searchSection` branches on the same predicate, so the tool list and the
+// instructions cannot drift apart.
+function usesRankedSearch(
+  agent: EmitAgent,
+  corpusTokens: Record<string, number> | undefined,
+): boolean {
+  if (agent.def.kind === "router") return false;
+  if (agent.def.max_hops > 0) return false;
+  const total = (agent.def.kb_namespaces ?? []).reduce(
+    (sum, ns) => sum + ((corpusTokens ?? {})[ns] ?? 0),
+    0,
+  );
+  return total > READ_ALL_TOKEN_LIMIT;
+}
 
 function searchSection(
   agent: EmitAgent,
@@ -146,7 +168,12 @@ function searchSection(
 }
 
 function frontMatter(input: EmitInput["agents"][number], opts: EmitClaudeCodeOptions): string {
-  const tools = opts.builtinSearch === true ? BUILTIN_SEARCH_TOOLS : input.def.tools;
+  const tools =
+    opts.builtinSearch !== true
+      ? input.def.tools
+      : usesRankedSearch(input, opts.corpusTokens)
+        ? RANKED_SEARCH_TOOLS
+        : BUILTIN_SEARCH_TOOLS;
   const meta = {
     name: input.def.name,
     description: input.def.description,
