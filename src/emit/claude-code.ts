@@ -72,6 +72,59 @@ const MODEL_FOR_TIER: Record<ModelTier, string> = {
   large: "sonnet",
 };
 
+// In Claude Code the host session routes. It sees every agent's description,
+// holds the conversation, and can dispatch two specialists in parallel and
+// reconcile them. An agent whose job is to hand off would need the Agent tool,
+// and a hop through it reloads the host's instruction files, relays the
+// question without the conversation, and puts a weaker picker in front of a
+// stronger one. Delegating agents stay in the manifest for hosts that do not
+// route, and are not emitted here.
+function delegates(agent: EmitAgent): boolean {
+  return agent.def.kind === "router" || agent.def.max_hops > 0;
+}
+
+// Emitted into every agent. A knowledge base records design, scope, intent and
+// decisions; it goes stale on status, implementation and history, which have
+// owners of their own. An agent that answers those from documents reads a stale
+// line as fact, or infers order from numbering, and is believed because it
+// cites.
+const ANSWER_RULES = [
+  "## Answering rules",
+  "",
+  "Your documents record design, scope, intent and decisions. Answer only those, and only from what the documents say.",
+  "",
+  "- Task status, whether code exists, what merged or when, and CI results each have an owning source: the issue tracker, the code, git history, CI. For any of them, name the owning source and stop, even when a document appears to state the answer. Documents go stale on these; the owning source does not. Never infer them from dates, numbering or wording.",
+  "- Never state a percentage, estimate or score that no document states.",
+  "- If you cannot find something, list the exact terms you searched and say it was not found under those terms. Never conclude that it does not exist.",
+  "- If two documents disagree, cite both and say that they conflict.",
+].join("\n");
+
+// The instance's instructions file is written for hosts that provide team-ai's
+// own retrieval tools, so its procedure names tools this host does not have.
+// Only its `## Domain rules` section carries over: the part that is about the
+// domain rather than about the tools.
+function domainRules(instructions: string): string {
+  const match = /^## Domain rules[^\n]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(instructions);
+  const rules = match?.[1]?.trim() ?? "";
+  return rules.length > 0 ? `## Domain rules\n\n${rules}` : "";
+}
+
+// Twice an emitted agent was told to do something its tool list could not do —
+// run a search command without Bash, hand off without Agent — and both failed
+// silently in use. Emit refuses to write such an agent instead.
+function assertToolsCoverInstructions(name: string, tools: string[], body: string): void {
+  const required = new Set<string>();
+  if (/```(?:bash|sh)\b/.test(body)) required.add("Bash");
+  if (/\b(?:hand off to|delegate to)\b/i.test(body)) required.add("Agent");
+  for (const match of body.matchAll(/`(kb_[a-z_]+)`/g)) required.add(match[1]!);
+  const missing = [...required].filter((tool) => !tools.includes(tool));
+  if (missing.length > 0) {
+    throw new Error(
+      `agent ${name}: instructions require ${missing.join(", ")}, which its tools do not grant`,
+    );
+  }
+}
+
 // The single source of truth for "this agent will be told to run ranked search".
 // `searchSection` branches on the same predicate, so the tool list and the
 // instructions cannot drift apart.
@@ -79,8 +132,6 @@ function usesRankedSearch(
   agent: EmitAgent,
   corpusTokens: Record<string, number> | undefined,
 ): boolean {
-  if (agent.def.kind === "router") return false;
-  if (agent.def.max_hops > 0) return false;
   const total = (agent.def.kb_namespaces ?? []).reduce(
     (sum, ns) => sum + ((corpusTokens ?? {})[ns] ?? 0),
     0,
@@ -99,33 +150,7 @@ function searchSection(
     "The knowledge base is the Markdown under the KB root in `team-ai/index.lock`.",
     "",
   ];
-  if (agent.def.kind === "router") {
-    return [
-      ...common,
-      "Use Read, Grep, and Glob to search it.",
-      "- Read `team-ai/manifest.yaml`.",
-      "- Match keywords and description, excluding `not_owned`.",
-      "- If exactly one domain matches, hand off to its subagent.",
-      "- If none match, search the KB root once. Hand off if the hits' namespace belongs to a domain; otherwise say you don't know and name the likely owner.",
-      "- Make at most one hop.",
-    ].join("\n");
-  }
-
   const namespaces = agent.def.kb_namespaces;
-
-  if (agent.def.max_hops > 0) {
-    return [
-      ...common,
-      "You delegate. You do not search your group's corpus yourself.",
-      "",
-      "- Read `team-ai/manifest.yaml` and find which of your domains owns the question.",
-      `- Your domains: ${namespaces.join(", ")}.`,
-      "- Hand off to that domain's subagent and stop.",
-      "- Only when a question genuinely spans two of your domains, delegate to",
-      "  both and reconcile their cited answers. Never answer from memory.",
-      "- If none of your domains owns it, say so and name the likely owner.",
-    ].join("\n");
-  }
 
   if (corpusTokens === undefined) {
     throw new Error("builtin-search emit requires corpus sizes; none were computed");
@@ -168,26 +193,36 @@ function searchSection(
 }
 
 function frontMatter(input: EmitInput["agents"][number], opts: EmitClaudeCodeOptions): string {
-  const tools =
-    opts.builtinSearch !== true
-      ? input.def.tools
-      : usesRankedSearch(input, opts.corpusTokens)
-        ? RANKED_SEARCH_TOOLS
-        : BUILTIN_SEARCH_TOOLS;
+  const builtin = opts.builtinSearch === true;
+  const tools = !builtin
+    ? input.def.tools
+    : usesRankedSearch(input, opts.corpusTokens)
+      ? RANKED_SEARCH_TOOLS
+      : BUILTIN_SEARCH_TOOLS;
   const meta = {
     name: input.def.name,
     description: input.def.description,
     tools: tools.join(", "),
+    // The host otherwise loads its project instruction files into every agent.
+    // For an agent that must answer from the knowledge base, those files are an
+    // answer source that bypasses retrieval — and a per-dispatch token cost.
+    ...(builtin ? { omitClaudeMd: true } : {}),
     kind: input.def.kind,
     model_tier: input.def.model_tier,
     model: MODEL_FOR_TIER[input.def.model_tier],
     kb_namespaces: input.def.kb_namespaces,
     max_hops: input.def.max_hops,
   };
-  const body =
-    opts.builtinSearch === true
-      ? searchSection(input, opts.corpusTokens, opts.searchCommand ?? DEFAULT_SEARCH_COMMAND)
-      : input.instructions.trim();
+  const body = builtin
+    ? [
+        searchSection(input, opts.corpusTokens, opts.searchCommand ?? DEFAULT_SEARCH_COMMAND),
+        ANSWER_RULES,
+        domainRules(input.instructions),
+      ]
+        .filter((section) => section.length > 0)
+        .join("\n\n")
+    : input.instructions.trim();
+  if (builtin) assertToolsCoverInstructions(input.def.name, tools, body);
   return `---\n${stringifyYaml(meta)}---\n\n${body}${body.length > 0 ? "\n" : ""}`;
 }
 
@@ -198,8 +233,10 @@ export function emitClaudeCode(
 ): string[] {
   validateFilePrefix(opts.filePrefix);
   const written: string[] = [];
+  const agents =
+    opts.builtinSearch === true ? input.agents.filter((agent) => !delegates(agent)) : input.agents;
 
-  for (const agent of input.agents) {
+  for (const agent of agents) {
     written.push(
       write(
         outDir,
@@ -214,7 +251,7 @@ export function emitClaudeCode(
       name: "team-ai-emitted",
       description: "Agents and skills emitted from a team-ai instance.",
       version: packageVersion(),
-      agents: input.agents.map((a) => `./.claude/agents/${opts.filePrefix ?? ""}${a.name}.md`),
+      agents: agents.map((a) => `./.claude/agents/${opts.filePrefix ?? ""}${a.name}.md`),
       skills: input.skills.map((s) => s.name),
     };
     written.push(

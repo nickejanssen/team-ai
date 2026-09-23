@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-09-22
+
+### Changed
+
+- **Claude Code builtin-search emit no longer writes delegating agents.**
+  Routers and group agents (`kind: router` or `max_hops > 0`) stay in the
+  manifest for hosts that do not route, but are not emitted for Claude Code,
+  whose session routes natively. As emitted they were told to hand off with no
+  tool that could, and improvised across several namespaces instead.
+- **Emitted agents set `omitClaudeMd: true`,** so an agent that must answer
+  from the knowledge base does not answer from the host's project instruction
+  files, and does not pay for loading them on every dispatch.
+
+### Added
+
+- **Answering rules in every emitted agent:** status, code existence, merge
+  history and CI results are named to their owning source rather than answered
+  from documents; no unstated percentages or estimates; an unfound item is
+  reported with the terms searched, never as nonexistent; conflicting
+  documents are cited together.
+- **`## Domain rules` passthrough.** That one section of an agent's
+  instructions file is emitted; the rest is written for hosts with team-ai's
+  own retrieval tools and is not.
+- **Emit refuses an agent whose instructions need a tool it lacks** (a shell
+  block without Bash, a hand-off without Agent, a `kb_*` tool not granted).
+
 ## [0.5.0] - 2026-09-14
 
 ### Changed
