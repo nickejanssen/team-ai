@@ -25,6 +25,7 @@ export interface EmitCommandOptions {
   builtinSearch?: boolean;
   allowTracked?: boolean;
   searchCommand?: string;
+  agentHook?: string;
 }
 
 const TARGETS = ["claude-code", "mcp-only", "generic"] as const;
@@ -105,6 +106,7 @@ export async function run(opts: EmitCommandOptions): Promise<number> {
       ...(opts.pluginManifest === undefined ? {} : { pluginManifest: opts.pluginManifest }),
       ...(opts.builtinSearch === undefined ? {} : { builtinSearch: opts.builtinSearch }),
       ...(opts.searchCommand === undefined ? {} : { searchCommand: opts.searchCommand }),
+      ...(opts.agentHook === undefined ? {} : { agentHook: opts.agentHook }),
       ...(corpusTokens === undefined ? {} : { corpusTokens }),
     });
   } else if (target === "mcp-only") written = emitMcpOnly(input, outResolved);

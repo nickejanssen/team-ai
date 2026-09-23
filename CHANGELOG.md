@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-09-22
+
+### Added
+
+- **`emit --agent-hook <cmd>`** declares a `PreToolUse` hook, matching
+  `Read|Grep|Glob|Bash`, in each emitted agent's own front matter. An instance
+  uses it to hold its knowledge-base agents inside the knowledge base
+  mechanically, since agents told so in words read files outside it. Declared
+  per agent, it runs only for those agents rather than for every tool call the
+  host session makes.
+
 ## [0.6.4] - 2026-09-22
 
 ### Changed

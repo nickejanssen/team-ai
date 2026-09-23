@@ -21,6 +21,7 @@ export interface EmitClaudeCodeOptions {
   builtinSearch?: boolean;
   corpusTokens?: Record<string, number>;
   searchCommand?: string;
+  agentHook?: string;
 }
 
 const BUILTIN_SEARCH_TOOLS = ["Read", "Grep", "Glob"];
@@ -207,6 +208,21 @@ function frontMatter(input: EmitInput["agents"][number], opts: EmitClaudeCodeOpt
     // For an agent that must answer from the knowledge base, those files are an
     // answer source that bypasses retrieval — and a per-dispatch token cost.
     ...(builtin ? { omitClaudeMd: true } : {}),
+    // Instructions tell an agent to stay inside its documents; a hook makes it
+    // so. Declared in the agent's own front matter, it runs only for that
+    // agent, not for every tool call the host session makes.
+    ...(builtin && opts.agentHook !== undefined
+      ? {
+          hooks: {
+            PreToolUse: [
+              {
+                matcher: "Read|Grep|Glob|Bash",
+                hooks: [{ type: "command", command: opts.agentHook }],
+              },
+            ],
+          },
+        }
+      : {}),
     kind: input.def.kind,
     model_tier: input.def.model_tier,
     model: MODEL_FOR_TIER[input.def.model_tier],
