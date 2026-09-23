@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-09-23
+
+### Removed
+
+- **`emit --agent-hook`**, added in 0.6.5. A `PreToolUse` hook declared in an
+  agent's own front matter was measured never to run, in the Claude Code
+  desktop app and in the CLI. A hook registered in the host's settings does
+  run for subagent tool calls and identifies the agent through `agent_type`;
+  instances enforce boundaries there instead.
+
+### Added
+
+- **A counting rule in every emitted agent:** a stated number of items must
+  equal the items listed. Live probes returned correct lists under wrong totals.
+
 ## [0.6.5] - 2026-09-22
 
 ### Added
