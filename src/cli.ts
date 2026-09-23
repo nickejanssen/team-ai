@@ -343,11 +343,7 @@ export function buildProgram(): Command {
           "emitted output is intentionally committed; skip the gitignore warning",
           false,
         )
-        .option("--search-command <cmd>", "command used by generated agents for ranked search")
-        .option(
-          "--agent-hook <cmd>",
-          "PreToolUse command run before each emitted agent reads, searches or runs a command",
-        );
+        .option("--search-command <cmd>", "command used by generated agents for ranked search");
     },
     run: emit.run,
   });
