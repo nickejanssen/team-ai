@@ -147,6 +147,38 @@ describe("emitClaudeCode — committed layout options", () => {
     expect(front.omitClaudeMd).toBe(true);
   });
 
+  it("declares an instance guard as a hook in each agent's own front matter", async () => {
+    const input = await inputWith({ name: "billing-sme", kb_namespaces: ["operating"] });
+    const outDir = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-hook-"));
+    const body = readFileSync(
+      emitClaudeCode(input, outDir, {
+        builtinSearch: true,
+        corpusTokens: TEST_CORPUS_TOKENS,
+        agentHook: "python scripts/guard.py",
+      })[0]!,
+      "utf8",
+    );
+    const front = parseYaml(/^---\n([\s\S]*?)\n---\n/.exec(body)?.[1] ?? "") as {
+      hooks?: { PreToolUse: { matcher: string; hooks: { type: string; command: string }[] }[] };
+    };
+    expect(front.hooks?.PreToolUse).toEqual([
+      {
+        matcher: "Read|Grep|Glob|Bash",
+        hooks: [{ type: "command", command: "python scripts/guard.py" }],
+      },
+    ]);
+  });
+
+  it("declares no hook unless one is given", async () => {
+    const input = await inputWith({ name: "billing-sme", kb_namespaces: ["operating"] });
+    const outDir = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-nohook-"));
+    const body = readFileSync(
+      emitClaudeCode(input, outDir, { builtinSearch: true, corpusTokens: TEST_CORPUS_TOKENS })[0]!,
+      "utf8",
+    );
+    expect(body).not.toMatch(/^hooks:/m);
+  });
+
   it("states which sources own status, code, history and CI", async () => {
     const input = await inputWith({ name: "billing-sme", kb_namespaces: ["operating"] });
     const outDir = mkdtempSync(join(tmpdir(), "team-ai-emit-cc-rules-"));

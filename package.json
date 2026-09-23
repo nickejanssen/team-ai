@@ -1,6 +1,6 @@
 {
   "name": "team-ai",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "description": "A forkable framework for standing up a team's AI capability: an owned knowledge base, scoped agents, deterministic scripts, and an eval harness.",
   "license": "Apache-2.0",
   "author": "nickejanssen",
